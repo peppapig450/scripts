@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Script to link all the scripts to ~/.local/bin/scripts to be on PATH
+# Script to link all the scripts to ~/.local/bin to be on PATH
 
 # TODO: Maybe add ability to change target dir.
 
