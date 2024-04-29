@@ -29,7 +29,7 @@ function handle_path() {
         	echo "${DIR} not found in \$PATH"
         	read -rp "Do you want to add it to your PATH? 'y' or 'n': " answer
         	if [[ "$answer" == "y" ]]; then
-            		echo "export $PATH=$DIR:$PATH" >> "$HOME/.bashrc"
+            		echo "export PATH=$DIR:\$PATH" >> "$HOME/.bashrc"
             		echo "Run 'source ~/.bashrc' after this is done to make sure $DIR is in the PATH"
         	elif [[ "$answer" == "n" ]]; then
             		echo "There's no point in linking to $DIR if it's not in path..."
