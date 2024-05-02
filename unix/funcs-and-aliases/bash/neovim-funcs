@@ -1,0 +1,12 @@
+# Bash Functions for fixing the cursor in windows terminal after closing neovim.
+
+function nvim() {
+        file="$1"
+        if [[ -n ${file-} ]]; then
+                command nvim "$file" && echo -ne '\e[0 q'
+        else
+                command nvim && echo -ne '\e[0 q'
+        fi
+}
+
+function reset-cursor() { echo -ne '\e[0 q' ; }
