@@ -19,7 +19,7 @@ fi
 getopt --test >/dev/null 2>&1 && true
 
 if [[ $? -ne 4 ]]; then
-	echo "`getopt --test` failed somehow. Install util-linux silly goose or your system install is probably already busted."
+	echo "'getopt --test' failed somehow. Install util-linux silly goose or your system install is probably already busted."
 	exit 1
 fi
 
@@ -34,27 +34,29 @@ Description:
 Options:
 	-h | --help		Displays this help
 	-p | --partition	The partition we are mounting in the chroot
-					- Default: unmounted partition
+						- Default: unmounted partition
 	-c | --chroot-dir	The chroot dir we are mounting the partition in
-					- Default: wherever specified partition is mounted OR /mnt/chroot
+						- Default: wherever specified partition is mounted OR /mnt/chroot
 	-a | --auto		Automatically create necessary directories
-					- Default: prompt when directories need to be created
+						- Default: prompt when directories need to be created
 	-t | --temp		Whether or not to mount root's /tmp in the chroot
-					- Default: no
+						- Default: no
+	-s | --stage3		Whether to download a stage3 archive and unpack it
+						- Default: no (assumes already unpacked)
 HELP
 	exit
 }
 
-# option --partition/-p requires a partition as argument, 
+# option --partition/-p requires a partition as argument,
 # option --chroot-dir/-c requires a directory as argument,
-LONGOPTS=partition:,chroot-dir:,auto,tmp,help
-OPTIONS=p:c:ath
+LONGOPTS=partition::,chroot-dir::,auto,tmp,help
+OPTIONS=p::c::ath
 
 # -temporarily store output to be able to check for errors
 # -activate quoting/enhanced mode (e.g. by writing out “--options”)
 # -pass arguments only via   -- "$@"   to separate them correctly
 # -if getopt fails, it complains itself to stdout
-PARSED=$(getopt --options=$OPTIONS --longoptions=$LONGOPTS --NAME "$0" -- "$@") || exit 2
+PARSED=$(getopt --options=$OPTIONS --longoptions=$LONGOPTS --name "$0" -- "$@") || exit 2
 # read getopt's output this way to handle quoting correctly
 eval set -- "$PARSED"
 
@@ -69,11 +71,11 @@ while (( $# > 0 )); do
 			shift 2
 			;;
 		-a|--auto)
-			AUTO=y
+			AUTO="${Y:-n}"
 			shift
 			;;
 		-t|--tmp)
-			TMP=y
+			TMP="${Y:-n}"
 			shift
 			;;
 		-h|--help)
@@ -88,7 +90,7 @@ while (( $# > 0 )); do
 			exit 3
 			;;
 	esac
-	if [[ ${PARTITION-} == "n" ]];
+	if [[ ${PARTITION-} == "n" ]]; then
 		echo "partition"
 	fi
 done
@@ -96,7 +98,7 @@ done
 # set this to PARTITION if not set
 UNMOUNTED_PART=$(lsblk -ipnl | awk '{ if (($6 ~ /part/) && ($7 !~ /[[:alnum:]\/]/)) { print $1 }}')
 
-# get the chroot directory from a mounted 
+# get the chroot directory from a mounted
 CHROOTDIR="$(findmnt -nt btrfs -o TARGET)"
 
 target_dirs=(
@@ -106,4 +108,3 @@ target_dirs=(
 	"${CHROOTDIR}/usr/src/linux"
 	"${chro}"
 )
-
