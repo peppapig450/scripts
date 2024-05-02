@@ -93,7 +93,8 @@ while (( $# > 0 )); do
 	fi
 done
 
-
+# set this to PARTITION if not set
+UNMOUNTED_PART=$(lsblk -ipnl | awk '{ if (($6 ~ /part/) && ($7 !~ /[[:alnum:]\/]/)) { print $1 }}')
 
 # get the chroot directory from a mounted 
 CHROOTDIR="$(findmnt -nt btrfs -o TARGET)"
