@@ -26,14 +26,15 @@ fi
 function show_usage() {
 	cat -- <<HELP
 Usage:
-	$(basename "$0") [-p/--partition </dev/sdX> -c/--chroot-dir </mnt/chroot> -a/--auto -t/--tmp -h/--help]
+	$(basename "$0") [-p/--package <atom> -P/--partition </dev/sdX> -c/--chroot-dir </mnt/chroot> -a/--auto -t/--tmp -h/--help]
 
 Description:
 	Automates setting up and entering a chroot environment for testing Gentoo packages
 
 Options:
 	-h | --help		Displays this help
-	-p | --partition	The partition we are mounting in the chroot
+	-p | --package 		Package name we are testing (determines mount point)
+	-P | --partition	The partition we are mounting in the chroot
 						- Default: unmounted partition
 	-c | --chroot-dir	The chroot dir we are mounting the partition in
 						- Default: wherever specified partition is mounted OR /mnt/chroot
@@ -41,16 +42,14 @@ Options:
 						- Default: prompt when directories need to be created
 	-t | --temp		Whether or not to mount root's /tmp in the chroot
 						- Default: no
-	-s | --stage3		Whether to download a stage3 archive and unpack it
-						- Default: no (assumes already unpacked)
 HELP
 	exit
 }
 
 # option --partition/-p requires a partition as argument,
 # option --chroot-dir/-c requires a directory as argument,
-LONGOPTS=partition::,chroot-dir::,auto,tmp,help
-OPTIONS=p::c::ath
+LONGOPTS=package:,partition::,chroot-dir::,auto,tmp,help
+OPTIONS=p:P::c::ath
 
 # -temporarily store output to be able to check for errors
 # -activate quoting/enhanced mode (e.g. by writing out “--options”)
@@ -60,9 +59,14 @@ PARSED=$(getopt --options=$OPTIONS --longoptions=$LONGOPTS --name "$0" -- "$@") 
 # read getopt's output this way to handle quoting correctly
 eval set -- "$PARSED"
 
-while (( $# > 0 )); do
+while [[ $# -gt 0 ]]; do
 	case "$1" in
-		-p|--partition)
+		-p|--package)
+			PACKAGE="$2"
+			PACKAGE="${PACKAGE##*/}"
+			shift 2
+			;;
+		-P|--partition)
 			PARTITION="${2:-n}"
 			shift 2
 			;;
@@ -71,12 +75,10 @@ while (( $# > 0 )); do
 			shift 2
 			;;
 		-a|--auto)
-			AUTO="${Y:-n}"
-			shift
+			AUTO="1"
 			;;
 		-t|--tmp)
-			TMP="${Y:-n}"
-			shift
+			TMP="1"
 			;;
 		-h|--help)
 			show_usage
@@ -85,26 +87,42 @@ while (( $# > 0 )); do
 			shift
 			break
 			;;
-		*)
-			echo "Invalid options passed.\t Try running $0 -h."
-			exit 3
-			;;
 	esac
-	if [[ ${PARTITION-} == "n" ]]; then
-		echo "partition"
-	fi
 done
 
 # set this to PARTITION if not set
-UNMOUNTED_PART=$(lsblk -ipnl | awk '{ if (($6 ~ /part/) && ($7 !~ /[[:alnum:]\/]/)) { print $1 }}')
+#UNMOUNTED_PART=$(lsblk -ipnl | awk '{ if (($6 ~ /part/) && ($7 !~ /[[:alnum:]\/]/)) { print $1 }}')
 
 # get the chroot directory from a mounted
-CHROOTDIR="$(findmnt -nt btrfs -o TARGET)"
+if [[ ${CHROOTDIR:-n} == "n" ]]; then
+	CHROOTDIR="$(findmnt -nt btrfs -o TARGET)"
+fi
 
+declare -A target_dirs
 target_dirs=(
-	"${CHROOTDIR}/proc"
-	"${CHROOTDIR}/dev"
-	"${CHROOTDIR}/usr/portage"
-	"${CHROOTDIR}/usr/src/linux"
-	"${chro}"
+	["proc"]="${CHROOTDIR}/proc"
+	["dev"]="${CHROOTDIR}/dev"
+	["sys"]="${CHROOTDIR}/sys"
+	["resolv"]="${CHROOTDIR}/etc/resolv.conf"
 )
+
+
+chroot_commands=(
+	"mount --type proc /proc ${target_dirs["proc"]}"
+	"mount --rbind /sys ${target_dirs["sys"]}"
+	"mount --make-rslave ${target_dirs["sys"]}"
+	"mount --rbind /dev ${target_dirs["dev"]}"
+	"mount --make-rslave ${target_dirs["dev"]}"
+	"cp /etc/resolv.conf ${target_dirs["resolv"]}"
+)
+
+# mount /tmp if TMP is set
+if [[ ${TMP:-0} == "1" ]]; then
+	target_dirs+=(["tmp"]="${CHROOTDIR}/tmp")
+fi
+
+echo "${}
+
+for mount_command in "${chroot_commands[@]}"; do
+	echo "${mount_command}"
+done
