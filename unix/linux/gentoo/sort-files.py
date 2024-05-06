@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import argparse
-from operator import itemgetter
 
 
 def get_args():
