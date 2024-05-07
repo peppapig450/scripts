@@ -83,14 +83,30 @@ def sort_lines(options, package_info):
 
     if options.limit_display_to and not 0:
         sorted_packages = sorted_packages[0 : options.limit_display_to]
+    
+    humanize_all_sizes(sorted_packages)
 
-    # humanize_all_sizes(sorted_packages)
     return sorted_packages
 
 
-def humanize_size(bytes):
-    pass
+def humanize_size(bytes, precision=2):
+    suffixes = ['B', 'KB', 'MB', 'GB']
+    suffix_index = 0  
+    while bytes >= 1024 and suffix_index < len(suffixes) - 1:
+        bytes /= 1024.0
+        suffix_index += 1
+    return f"{bytes:.{precision}f} {suffixes[suffix_index]}"
 
+
+def humanize_all_sizes(package_info, size_index=4):
+    for sublist in package_info:
+        sublist[size_index] = humanize_size(int(sublist[size_index][0]))
+
+        for index, item in enumerate(sublist):
+            print(item)
+            if isinstance(item, tuple):
+                sublist[index] = "".join([str(x) for x in item])
+    return package_info
 
 def read_lines():
     with open("test.txt", "r", encoding="utf-8") as file:
@@ -120,5 +136,5 @@ if __name__ == "__main__":
     lines = read_lines()
 
     sorted_d = sort_lines(options, lines)
-    for sort in sorted_d:
-        print(sort)
+    for line in sorted_d:
+        print(', '.join(line))
