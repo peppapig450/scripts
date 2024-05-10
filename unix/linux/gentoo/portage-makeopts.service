@@ -1,0 +1,12 @@
+[Unit]
+Description=Set Portage's MAKEOPTS based on number of processors.
+DefaultDependencies=no
+After=getty.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStart=/usr/bin/bash -c 'nproc_minus_one=$(($(nproc) - 1)); doas sed "s/-j[0-9]*/-j$nproc_minus_one/g" /etc/portage/make.conf'
+
+[Install]
+WantedBy=default.target
