@@ -5,7 +5,6 @@ import argparse
 import importlib.util
 import sys
 import pkgutil
-import subprocess
 
 
 def extract_imports_from_file(file_path):
@@ -23,6 +22,19 @@ def extract_imports_from_file(file_path):
     return imports
 
 
+def extract_defined_entities_from_file(file_path):
+    with open(file_path, "r") as file:
+        tree = ast.parse(file.read(), filename=file_path)
+
+    defined_entities = set()
+    for node in tree.body:
+        if isinstance(node, ast.ClassDef):
+            defined_entities.add(node.name)
+        elif isinstance(node, ast.FunctionDef):
+            defined_entities.add(node.name)
+    return defined_entities
+
+
 def find_external_dependencies(path, file_pattern="*.py"):
     if os.path.isdir(path):
         return find_external_dependencies_in_directory(path)
@@ -32,22 +44,28 @@ def find_external_dependencies(path, file_pattern="*.py"):
 
 def find_external_dependencies_in_directory(directory):
     external_dependencies = set()
+    local_definitions = set()
     for root, _, files in os.walk(directory):
         for file_name in files:
             if file_name.endswith(".py"):
                 file_path = os.path.join(root, file_name)
                 imports = extract_imports_from_file(file_path)
+                definitions = extract_defined_entities_from_file(file_path)
                 external_dependencies.update(imports)
-    return external_dependencies
+                local_definitions.update(definitions)
+    return external_dependencies, local_definitions
 
 
 def find_external_dependencies_matching_glob(pattern):
     external_dependencies = set()
+    local_definitions = set()
     files = glob.glob(pattern)
     for file_path in files:
         imports = extract_imports_from_file(file_path)
+        definitions = extract_defined_entities_from_file(file_path)
         external_dependencies.update(imports)
-    return external_dependencies
+        local_definitions.update(definitions)
+    return external_dependencies, local_definitions
 
 
 def resolve_import_name(import_name):
@@ -68,23 +86,19 @@ def get_std_lib_modules():
     return std_lib_modules
 
 
-def get_installed_packages():
-    installed_packages = subprocess.run(
-        [sys.executable, "-m", "pip", "freeze"], stdout=subprocess.PIPE
-    )
-    packages = set(
-        line.decode().split("==")[0] for line in installed_packages.stdout.splitlines()
-    )
-    return packages
+def is_local_module(module_name, project_root, local_definitions):
+    if module_name in local_definitions:
+        return True
 
-
-def is_local_module(module_name, project_root):
-    module_path = module_name.replace(".", os.sep) + ".py"
+    module_path = module_name.replace(".", os.sep)
+    module_file = module_path + ".py"
+    module_dir = os.path.join(module_path, "__init__.py")
     for root, _, files in os.walk(project_root):
-        if module_path in [
+        rel_files = [
             os.path.relpath(os.path.join(root, file), start=project_root)
             for file in files
-        ]:
+        ]
+        if module_file in rel_files or module_dir in rel_files:
             return True
     return False
 
@@ -132,7 +146,7 @@ if __name__ == "__main__":
     pattern = args.pattern
     output = args.output
 
-    external_dependencies = find_external_dependencies(path, pattern)
+    external_dependencies, local_definitions = find_external_dependencies(path, pattern)
 
     # Use map to resolve import names to actual modules
     resolved_dependencies = set(map(resolve_import_name, external_dependencies))
@@ -143,20 +157,17 @@ if __name__ == "__main__":
     }
 
     std_lib_modules = get_std_lib_modules()
-    installed_packages = get_installed_packages()
 
     # Determine non-standard library dependencies
     non_std_lib_dependencies = resolved_dependencies - std_lib_modules
 
-    # Filter out local project modules
     external_dependencies = {
         module_name
         for module_name in non_std_lib_dependencies
-        if not is_local_module(module_name, path)
+        if not is_local_module(module_name, path, local_definitions)
     }
 
     # Filter out only external packages installed via pip
-    external_dependencies = external_dependencies - installed_packages
 
     if output == "print":
         print_dependencies(external_dependencies)
