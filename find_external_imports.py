@@ -1,3 +1,21 @@
+"""
+This script identifies external dependencies in a Python project.
+
+The script scans Python files within a specified directory or matching a glob pattern,
+extracts import statements, and determines which dependencies are not part of the standard
+library or locally defined within the project. It then outputs these external dependencies
+either to the console or to a requirements.txt file.
+
+Usage:
+    python find_external_imports.py <path> [--pattern <pattern>] [--output <output>]
+
+Arguments:
+    path        The directory path or glob pattern to search for Python files.
+    --pattern   The file pattern to search for Python files. Defaults to "*.py".
+    --output    The output method: "print" to display on the console or "requirements"
+                to save to requirements.txt. Defaults to "print".
+"""
+
 import os
 import ast
 import glob
