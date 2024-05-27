@@ -5,10 +5,20 @@ import argparse
 import importlib.util
 import sys
 import pkgutil
+from typing import Set, Tuple, Optional
 
 
-def extract_imports_from_file(file_path):
-    with open(file_path, "r") as file:
+def extract_imports_from_file(file_path: str) -> Set[str]:
+    """
+    Extracts import statements from a Python file.
+
+    Args:
+        file_path (str): The path to the Python file.
+
+    Returns:
+        Set[str]: A set of import statements found in the file.
+    """
+    with open(file_path, "r", encoding="utf-8") as file:
         tree = ast.parse(file.read(), filename=file_path)
 
     imports = set()
@@ -22,8 +32,17 @@ def extract_imports_from_file(file_path):
     return imports
 
 
-def extract_defined_entities_from_file(file_path):
-    with open(file_path, "r") as file:
+def extract_defined_entities_from_file(file_path: str) -> Set[str]:
+    """
+    Extracts defined classes and functions from a Python file.
+
+    Args:
+        file_path (str): The path to the Python file.
+
+    Returns:
+        Set[str]: A set of class and function names defined in the file.
+    """
+    with open(file_path, "r", encoding="utf-8") as file:
         tree = ast.parse(file.read(), filename=file_path)
 
     defined_entities = set()
@@ -35,14 +54,32 @@ def extract_defined_entities_from_file(file_path):
     return defined_entities
 
 
-def find_external_dependencies(path, file_pattern="*.py"):
+def find_external_dependencies(path: str) -> Tuple[Set[str], Set[str]]:
+    """
+    Finds external dependencies in a given directory or file pattern.
+
+    Args:
+        path (str): The directory path or glob pattern.
+        file_pattern (str): The file pattern to search for Python files. Defaults to "*.py".
+
+    Returns:
+        Tuple[Set[str], Set[str]]: A tuple containing sets of external dependencies and local definitions.
+    """
     if os.path.isdir(path):
         return find_external_dependencies_in_directory(path)
-    else:
-        return find_external_dependencies_matching_glob(path)
+    return find_external_dependencies_matching_glob(path)
 
 
-def find_external_dependencies_in_directory(directory):
+def find_external_dependencies_in_directory(directory) -> Tuple[Set[str], Set[str]]:
+    """
+    Finds external dependencies in all Python files within a directory.
+
+    Args:
+        directory (str): The directory path.
+
+    Returns:
+        Tuple[Set[str], Set[str]]: A tuple containing sets of external dependencies and local definitions.
+    """
     external_dependencies = set()
     local_definitions = set()
     for root, _, files in os.walk(directory):
@@ -56,7 +93,16 @@ def find_external_dependencies_in_directory(directory):
     return external_dependencies, local_definitions
 
 
-def find_external_dependencies_matching_glob(pattern):
+def find_external_dependencies_matching_glob(pattern: str) -> Tuple[Set[str], Set[str]]:
+    """
+    Finds external dependencies in Python files matching a glob pattern.
+
+    Args:
+        pattern (str): The glob pattern to search for Python files.
+
+    Returns:
+        Tuple[Set[str], Set[str]]: A tuple containing sets of external dependencies and local definitions.
+    """
     external_dependencies = set()
     local_definitions = set()
     files = glob.glob(pattern)
@@ -68,7 +114,16 @@ def find_external_dependencies_matching_glob(pattern):
     return external_dependencies, local_definitions
 
 
-def resolve_import_name(import_name):
+def resolve_import_name(import_name: str) -> Optional[str]:
+    """
+    Resolves an import name to its actual module name.
+
+    Args:
+        import_name (str): The import name to resolve.
+
+    Returns:
+        Optional[str]: The resolved module name, or the original name if resolution fails.
+    """
     try:
         module = importlib.import_module(import_name)
         return module.__name__
@@ -76,7 +131,13 @@ def resolve_import_name(import_name):
         return import_name  # Return the original name if the module is not found
 
 
-def get_std_lib_modules():
+def get_std_lib_modules() -> Set[str]:
+    """
+    Retrieves the names of all standard library modules.
+
+    Returns:
+        Set[str]: A set of standard library module names.
+    """
     std_lib_modules = set(sys.builtin_module_names)
     std_lib_modules.update(
         module.name for module in pkgutil.iter_modules() if module.module_finder is None
@@ -86,7 +147,20 @@ def get_std_lib_modules():
     return std_lib_modules
 
 
-def is_local_module(module_name, project_root, local_definitions):
+def is_local_module(
+    module_name: str, project_root: str, local_definitions: Set[str]
+) -> bool:
+    """
+    Determines if a module is a local module within the project.
+
+    Args:
+        module_name (str): The name of the module to check.
+        project_root (str): The root directory of the project.
+        local_definitions (Set[str]): A set of local definitions (classes and functions).
+
+    Returns:
+        bool: True if the module is local, False otherwise.
+    """
     if module_name in local_definitions:
         return True
 
@@ -103,13 +177,28 @@ def is_local_module(module_name, project_root, local_definitions):
     return False
 
 
-def save_to_requirements_file(external_dependencies, file_path="requirements.txt"):
-    with open(file_path, "w") as f:
+def save_to_requirements_file(
+    external_dependencies: Set[str], file_path: str = "requirements.txt"
+) -> None:
+    """
+    Saves the external dependencies to a requirements.txt file.
+
+    Args:
+        external_dependencies (Set[str]): The set of external dependencies.
+        file_path (str): The path to the requirements file. Defaults to "requirements.txt".
+    """
+    with open(file_path, "w", encoding="utf-8") as file:
         for module_name in external_dependencies:
-            f.write(module_name + "\n")
+            file.write(module_name + "\n")
 
 
-def print_dependencies(external_dependencies):
+def print_dependencies(external_dependencies: Set[str]) -> None:
+    """
+    Prints the external dependencies.
+
+    Args:
+        external_dependencies (Set[str]): The set of external dependencies.
+    """
     if external_dependencies:
         print("External dependencies:")
         for module_name in external_dependencies:
@@ -146,7 +235,7 @@ if __name__ == "__main__":
     pattern = args.pattern
     output = args.output
 
-    external_dependencies, local_definitions = find_external_dependencies(path, pattern)
+    external_dependencies, local_definitions = find_external_dependencies(path)
 
     # Use map to resolve import names to actual modules
     resolved_dependencies = set(map(resolve_import_name, external_dependencies))
