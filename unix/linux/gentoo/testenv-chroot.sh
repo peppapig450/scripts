@@ -113,9 +113,17 @@ declare_all() {
   declare -pf
 }
 
+<<<<<<< Updated upstream
 #try_cast() )
 #  _=$(( $1#$2 ))
 #)
+=======
+try_cast() {
+  _=$(( $1#$2 ))
+  return _
+}
+
+>>>>>>> Stashed changes
 
 valid_number_of_base() {
   local base=$1 len=${#2} i=
