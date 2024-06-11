@@ -25,12 +25,15 @@ def find_import_paths_recursively(module_name: str, chain: ChainMap) -> None:
                 if module.__file__:
                     dependencies[name] = module.__file__
                     find_import_paths_recursively(
-                        name, chain.new_child({name: dependencies[name]}))
+                        name, chain.new_child({name: dependencies[name]})
+                    )
 
             chain.maps[0][module_name] = {
-                'path': module_path, 'dependencies': dependencies}
+                "path": module_path,
+                "dependencies": dependencies,
+            }
     except ModuleNotFoundError:
-        chain.maps[0][module_name] = {'path': None, 'dependencies': {}}
+        chain.maps[0][module_name] = {"path": None, "dependencies": {}}
 
 
 def find_import_paths_using_modulefinder(file_path: str) -> ChainMap:
@@ -41,8 +44,7 @@ def find_import_paths_using_modulefinder(file_path: str) -> ChainMap:
     chain = ChainMap()
     for name, module in finder.modules.items():
         if module.__file__:
-            chain.maps.append(
-                {name: {'path': module.__file__, 'dependencies': {}}})
+            chain.maps.append({name: {"path": module.__file__, "dependencies": {}}})
             find_import_paths_recursively(name, chain)
 
     return chain
@@ -61,7 +63,7 @@ def main(input_value: str):
         print(f"{module}:")
         print(f"  Path: {info['path']}")
         print("  Dependencies:")
-        for dep, dep_path in info['dependencies'].items():
+        for dep, dep_path in info["dependencies"].items():
             print(f"    {dep}: {dep_path}")
 
 
