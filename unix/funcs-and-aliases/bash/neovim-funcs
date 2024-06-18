@@ -9,4 +9,4 @@ function nvim() {
         fi
 }
 
-function reset-cursor() { echo -ne '\e[0 q' ; }
+alias reset-cursor="echo -ne '\e[0 q'"
