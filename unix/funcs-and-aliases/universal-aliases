@@ -1,0 +1,2 @@
+# Alias for ignoring __pycache__ and .pyc files with tree
+alias python-tree="command tree -I '__pycache__|*.pyc'"
