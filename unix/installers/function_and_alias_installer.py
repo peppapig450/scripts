@@ -36,11 +36,12 @@ def find_func_and_alias_files() -> set[str]:
     raise NotADirectoryError("funcs-and-aliases directory not found.")
 
 
+#TODO: first part captures the name properly, body capture needs work
 def capture_shell_functions(file_content: str) -> dict[str, ShellFunction]:
     function_pattern = re.compile(
         r"""
         ^\s*                        # Start of the line with optional leading whitespace
-        (                           # Non-capturing group for the function definition
+        (?:                         # Non-capturing group for the function definition
             (\w+)\s*\(\s*\)\s*      # Function name with '()'
             |                       # OR
             function\s+(\w+)\s*     # 'function' keyword followed by function name
