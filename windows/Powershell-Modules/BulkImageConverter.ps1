@@ -34,20 +34,5 @@ if (-not (Test-Path $Directory -PathType Container)) {
     Write-Error "Directory '$Directory' not found."
 }
 
-# Function to convert files
-function ConvertFiles($dir) {
-    # Get all files with the specified image extension in the directory
-    $imageFiles = Get-ChildItem -Path $dir -File | Where-Object { $_.Extension.ToLower() -in $normalizedExtensions }
-
-    if ($imageFiles.Count -eq 0) {
-        Write-Host "No files found with specified image extensions in directory '$dir'."
-        return
-    }
-
-    # Process each image file with this extension
-    foreach ($file in $imageFiles) {
-        $outputFile = Join-Path -Path $dir -ChildPath "$($file.BaseName).$OutputFormat"
-
-    }
-
-}
+# Initialize variables for summary
+$filesToProcess = @()
