@@ -100,8 +100,8 @@ while getopt "$options" opt; do
     \?) echo "Invalid option: -$OPTARG" >&2; exit 1 ;;  # Error handling
     -)  # Handle long options (if any)
       case "$OPTARG" in
-        help) help ;;  # Replace "help" with your actual help function name
-        *) usage ;;     # Replace "usage" with your actual usage function name
+        help) help ;; 
+        *) usage ;;     
       esac
       ;;
   esac
