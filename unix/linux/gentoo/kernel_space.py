@@ -1,27 +1,73 @@
 #!/usr/bin/env python
+"""
+This script checks the remaining space on the boot partition and calculates the average size
+of kernel and initramfs files. It determines if there is enough space for an additional kernel
+based on the average size of existing kernels. This eliminates the need to manually check before
+we install a new kernel.
+"""
+# TODO: possible extension automatically run eclean-kernel if we need to.
 import os
-import sys
 from pathlib import Path
 
-def get_file_size(filepath):
+
+def get_file_size(filepath) -> int:
+    """
+    Get the size of a file in bytes.
+
+    Args:
+        filepath (str): The path to the file.
+
+    Returns:
+        int: The size of the file in bytes. Returns 0 if there is an error.
+    """
     try:
         return os.path.getsize(filepath)
     except OSError as e:
         print(f"Error getting file size for {filepath}: {e}")
         return 0
 
-def get_remaining_space(filepath: Path):
+
+def get_remaining_space(filepath: Path) -> int:
+    """
+    Get the remaining free space on the file system containing the given path.
+
+    Args:
+        filepath (Path): The path to the directory.
+
+    Returns:
+        int: The remaining free space in bytes.
+    """
     statvfs = os.statvfs(filepath)
     return statvfs.f_bavail * statvfs.f_frsize
 
-def get_boot_dir_path():
+
+def get_boot_dir_path() -> Path:
+    """
+    Get the Path object for the /boot directory.
+
+    Returns:
+        Path: The Path object for the /boot directory.
+
+    Raises:
+        FileNotFoundError: If the /boot directory does not exist.
+    """
     boot_dir = Path("/boot")
     if not boot_dir.is_dir():
         raise FileNotFoundError("'/boot' directory does not exist")
 
     return boot_dir
 
-def humanize_size(size_bytes) -> str:
+
+def humanize_size(size_bytes: int) -> str:
+    """
+    Convert a size in bytes to a human-readable string with appropriate units.
+
+    Args:
+        size_bytes (int): The size in bytes.
+
+    Returns:
+        str: The size in a human-readable string format.
+    """
     units = ["B", "KB", "MB", "GB"]
     size = float(size_bytes)
     unit_index = 0
@@ -34,7 +80,11 @@ def humanize_size(size_bytes) -> str:
     # Return the human-readable size
     return f"{size:.2f} {units[unit_index]}"
 
+
 def main():
+    """
+    Main function to check the remaining space on the boot partition and determine if a kernel needs to be removed.
+    """
     boot_dir = get_boot_dir_path()
 
     remaining_space = get_remaining_space(boot_dir)
@@ -44,7 +94,7 @@ def main():
 
     for kernel_file in kernel_files:
         total_kernel_size += get_file_size(kernel_file)
-        kernel_version = kernel_file.name[len("kernel-"):]
+        kernel_version = kernel_file.name[len("kernel-") :]
         initramfs_file = boot_dir / f"initramfs-{kernel_version}.img"
         if initramfs_file.exists():
             total_kernel_size += get_file_size(initramfs_file)
@@ -59,8 +109,11 @@ def main():
     # print(f"Average size of the kernels (including initramfs): {humanize_size(avg_kernel_size)}")
 
     if remaining_space < avg_kernel_size:
-        print("Warning: You may need to remove a kernel. Remaining space is less than the average kernel size.")
+        print(
+            "Warning: You may need to remove a kernel. Remaining space is less than the average kernel size."
+        )
     print("You have enough space on the boot partition. No need to remove any kernels.")
+
 
 if __name__ == "__main__":
     main()
