@@ -85,8 +85,8 @@ def analyze_project(directory: Path) -> dict:
     return project_summary
 
 
-def print_summary(summary):
-    for file, content in summary.items:
+def print_summary(summary: dict):
+    for file, content in summary.items():
         print(f"\nFile: {file}")
 
         functions = content.get("functions", None)
@@ -115,6 +115,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     summary = analyze_project(args.directory)
-    print(type(summary))
-    print(dir(summary))
+
     print_summary(summary)
