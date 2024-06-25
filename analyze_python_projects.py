@@ -115,4 +115,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     summary = analyze_project(args.directory)
+    print(type(summary))
+    print(dir(summary))
     print_summary(summary)
