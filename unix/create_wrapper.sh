@@ -61,6 +61,9 @@ while getopts ":s:p:d:r" opt; do
             echo "Option -$OPTARG requires an argument." >&2
             usage
         ;;
+        *)
+            usage
+        ;;
     esac
 done
 
