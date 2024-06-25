@@ -54,7 +54,7 @@ function link_scripts_to_bin() {
 			filename="${DIR}/$(basename ${script%.*})"
 			# link script to bin 
 			# TODO: investigate using ln -v
-			ln -sn "${script}" "${filename}"
+			ln -srn "${script}" "${filename}"
 			
 			# print message depending on success or failure of symlinking
 			if [[ $? -eq 0 ]]; then
