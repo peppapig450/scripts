@@ -30,7 +30,7 @@ verify_bin_dir() {
         return 1
     fi
     
-    if [[ $PATH =~ :$TARGET_DIR: ]]; then
+    if [[ $PATH =~ $TARGET_DIR: ]]; then
         return 0
     else
         echo "$TARGET_DIR exists, but is not in the \$PATH"
