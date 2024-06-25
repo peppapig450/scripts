@@ -4,6 +4,7 @@ from pathlib import Path
 from pprint import pprint
 
 
+# TODO: this doesn't work i dont think
 class FunctionCallAnalyzer(ast.NodeVisitor):
     def __init__(self):
         self.calls = []
