@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -eu
+set -e
 
 # Make sure the dpkg-query command is available (check if we're on a debian based system)
 if ! command -v dpkg-query >/dev/null 2>&1; then
@@ -31,11 +31,12 @@ EOF
 list_files() {
 	while read -r file; do
 		if [[ -f "${file}" ]]; then
-			file "$file"
+			file -L "$file"
 		fi
 	done < <(dpkg-query -L "$PACKAGE_NAME")
 }
 
+#TODO: not working as of right now
 # Function to summarize file types
 summarize_files() {
 	# Use an associative (key, value) array to store the unique file types
@@ -43,7 +44,7 @@ summarize_files() {
 
 	while read -r file; do
 		if [[ -f "${file}" ]]; then
-			file_type="$(file "$file" | cut -d: -f2- | xargs)"
+			file_type="$(file -L "$file" | cut -d: -f2- | xargs)"
 			((file_types["$file_type"]++))
 		fi
 	done < <(dpkg-query -L "$PACKAGE_NAME")
@@ -83,7 +84,7 @@ done
 # Check to make sure (-p) is used and that the passed package name is valid
 if [[ -n "${PACKAGE_NAME}" ]]; then
 	if ! dpkg-query -l "$PACKAGE_NAME" >/dev/null 2>&1; then
-		echo "Error: Package '$PACKAGE_NAME' not found, make sure it\'s installed and you spelled correctly." >&2
+		printf "Error: Package '%s' not found, make sure it's installed and you spelled correctly.\n" "${PACKAGE_NAME}" >&2
 		exit 1
 	fi
 else
