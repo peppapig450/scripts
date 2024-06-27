@@ -112,7 +112,8 @@ def main():
         print(
             "Warning: You may need to remove a kernel. Remaining space is less than the average kernel size."
         )
-    print("You have enough space on the boot partition. No need to remove any kernels.")
+    else:
+        print("You have enough space on the boot partition. No need to remove any kernels.")
 
 
 if __name__ == "__main__":
