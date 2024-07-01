@@ -223,13 +223,13 @@ class AnalyzerFactory:
         Raises:
             AnalyzerCreationError: If no suitable analyzer is found for the distribution.
         """
-        distrubition = cls._detect_distribution()
+        distribution = cls._detect_distribution()
         try:
-            analyzer_class = cls.PACKAGE_ANALYZERS[distrubition]
+            analyzer_class = cls.PACKAGE_ANALYZERS[distribution]
             return analyzer_class()
         except KeyError as exc:
             raise EnvironmentError(
-                f"No analyzer found for distribution {distrubition}'s package manager"
+                f"No analyzer found for distribution {distribution}'s package manager"
             ) from exc
 
 
