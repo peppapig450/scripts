@@ -82,7 +82,7 @@ class PackageContentAnalyzer(ABC):
                 continue
 
             if python_magic:
-                with file_path.open("rb", encoding="utf-8") as file:
+                with file_path.open("rb") as file:
                     file_buffer = file.read(2048)
 
                 # Use python-magic to get the file type from libmagic
