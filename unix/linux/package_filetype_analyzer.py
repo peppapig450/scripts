@@ -22,11 +22,19 @@ type FileTypes = dict[Path, str]
 
 
 class PackageAnalysisError(Exception):
-    pass
+    """Base exception class for package analysis errors."""
 
 
 class DistributionDetectionError(PackageAnalysisError):
-    pass
+    """Exception raised for errors in detecting the distribution."""
+
+
+class PackageNotInstalledError(PackageAnalysisError):
+    """Exception raised when the specified package is not installed."""
+
+
+class AnalyzerCreationError(PackageAnalysisError):
+    """Exception raised for errors in creating an analyzer."""
 
 
 class PackageContentAnalyzer(ABC):
@@ -54,7 +62,7 @@ class PackageContentAnalyzer(ABC):
             list: List of file paths within the package.
         """
 
-    def _analyze_files(self, file_list: list[str]):
+    def analyze_files(self, file_list: list[str]):
         """
         Analyzes file types of files in the provided list.
 
@@ -126,7 +134,16 @@ class PackageContentAnalyzer(ABC):
 
 
 class AptPackageContentAnalyzer(PackageContentAnalyzer):
-    def is_package_installed(self, package_name: str):
+    def is_package_installed(self, package_name: str) -> bool:
+        """
+        Checks if the specified APT package is installed on the system.
+
+        Args:
+            package_name (str): Name of the package to check.
+
+        Returns:
+            bool: True if the package is installed, False otherwise.
+        """
         result = subprocess.run(
             ["dpkg-query", "-l", package_name],
             stdout=subprocess.DEVNULL,
@@ -136,6 +153,18 @@ class AptPackageContentAnalyzer(PackageContentAnalyzer):
         return result.returncode == 0
 
     def get_file_list(self, package_name: str) -> list[str]:
+        """
+        Retrieves a list of files belonging to the specified APT package.
+
+        Args:
+            package_name (str): Name of the package to get files for.
+
+        Returns:
+            list: List of file paths within the package.
+
+        Raises:
+            PackageAnalysisError: If there is an error retrieving the package contents.
+        """
         try:
             files = (
                 subprocess.check_output(["dpkg-query", "-L", package_name])
@@ -144,39 +173,69 @@ class AptPackageContentAnalyzer(PackageContentAnalyzer):
             )
             return files
         except subprocess.CalledProcessError as e:
-            raise Exception(
+            raise PackageAnalysisError(
                 "Something went wrong getting the content of the specified APT package."
             ) from e
 
 
-class AnalayzerFactory:
+class AnalyzerFactory:
     PACKAGE_ANALYZERS: dict[str, Type[PackageContentAnalyzer]] = {
         "debian": AptPackageContentAnalyzer,
     }
 
-    def detect_distrubition(self) -> str:
-        return self.detect_distrubition()
+    @staticmethod
+    def _detect_distribution() -> str:
+        """
+        Detects the distribution ID_LIKE from os-release files.
 
-    def _detect_distribution(self) -> str:
+        Returns:
+            str: The distribution ID_LIKE.
+
+        Raises:
+            DistributionDetectionError: If ID_LIKE is not found in any os-release files.
+        """
         os_release_paths = [
             "/etc/os-release",
             "/usr/lib/os-release",
             "/etc/initrd-release",
             "/usr/lib/extension-release.d/extension-release.IMAGE",
         ]
-        os_release_paths = [Path(file).resolve() for file in os_release_paths]
 
         for file_path in os_release_paths:
+            file_path = Path(file_path).resolve()
             if file_path.is_file():
-                with file_path.open("r") as file:
+                with file_path.open("r", encoding="utf-8") as file:
                     for line in file:
                         return line.split("=")[1].strip().strip('"')
         raise DistributionDetectionError(
             "ID_LIKE not found in any of the os_release files or os_release files not there."
         )
 
+    @classmethod
+    def get_analyzer(cls) -> PackageContentAnalyzer:
+        """
+        Returns an appropriate PackageContentAnalyzer based on the detected distribution.
+
+        Returns:
+            PackageContentAnalyzer: An instance of the appropriate analyzer.
+
+        Raises:
+            AnalyzerCreationError: If no suitable analyzer is found for the distribution.
+        """
+        distrubition = cls._detect_distribution()
+        try:
+            analyzer_class = cls.PACKAGE_ANALYZERS[distrubition]
+            return analyzer_class()
+        except KeyError as exc:
+            raise EnvironmentError(
+                f"No analyzer found for distribution {distrubition}'s package manager"
+            ) from exc
+
 
 def main():
+    """
+    Main function to parse arguments and perform package analysis.
+    """
     parser = argparse.ArgumentParser(
         description="Analyze package contents across Linux distrubitions."
     )
@@ -210,3 +269,25 @@ def main():
         raise ValueError(
             "Error: at least one of these options (-l, -s, -b) must be specified."
         )
+
+    try:
+        analyzer = AnalyzerFactory.get_analyzer()
+    except EnvironmentError as exc:
+        raise AnalyzerCreationError from exc
+
+    if not analyzer.is_package_installed(args.package):  # type: ignore
+        raise PackageNotInstalledError(
+            "Package: '{args.package}' not found or not installed."
+        )
+
+    file_list = analyzer.get_file_list(args.package)
+    file_types = analyzer.analyze_files(file_list)
+
+    list_output = args.list or args.both
+    summarize_output = args.summarize or args.both
+
+    analyzer.display_output(file_types, list_output, summarize_output)
+
+
+if __name__ == "__main__":
+    main()
