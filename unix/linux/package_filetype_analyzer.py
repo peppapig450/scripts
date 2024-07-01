@@ -130,7 +130,7 @@ class PackageContentAnalyzer(ABC):
 
             # Print the summary using Counter
             print("\nSummary of file types:")
-            for count, file_type in file_type_counts.most_common():
+            for file_type, count in file_type_counts.most_common():
                 print(f"{count} files are of type {file_type}")
 
 
