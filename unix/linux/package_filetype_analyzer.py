@@ -207,7 +207,8 @@ class AnalyzerFactory:
             if file_path.is_file():
                 with file_path.open("r", encoding="utf-8") as file:
                     for line in file:
-                        return line.split("=")[1].strip().strip('"')
+                        if line.startswith("ID_LIKE"):
+                            return line.split("=")[1].strip().strip('"')
         raise DistributionDetectionError(
             "ID_LIKE not found in any of the os_release files or os_release files not there."
         )
