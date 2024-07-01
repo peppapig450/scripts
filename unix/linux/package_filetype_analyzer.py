@@ -118,7 +118,8 @@ class PackageContentAnalyzer(ABC):
         Returns:
             None
 
-        This function allows for printing either a list of analyzed files with their types or a summary of the encountered file types and their counts based on the provided boolean flags. It avoids unnecessary processing by using separate checks for each output type.
+        This function allows for printing either a list of analyzed files with their types or a summary of the encountered
+        file types and their counts based on the provided boolean flags. It avoids unnecessary processing by using separate checks for each output type.
         """
         if list_output:
             for file, file_type in file_types.items():
