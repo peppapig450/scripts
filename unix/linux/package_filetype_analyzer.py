@@ -254,7 +254,7 @@ def main():
         "-s",
         "--summarize",
         action="store_true",
-        help="Summarize the file types by number and type.",
+        help="Summarize the file types with number of each type.",
     )
     parser.add_argument(
         "-b",
