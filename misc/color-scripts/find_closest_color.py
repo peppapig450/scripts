@@ -1,112 +1,90 @@
-from colormath.color_objects import sRGBColor, LabColor
-from colormath.color_conversions import convert_color
-from colormath.color_diff import delta_e_cie2000, delta_e_cmc
-from enum import StrEnum
+from skimage.color import rgb2lab, deltaE_cmc, deltaE_ciede2000
 import numpy as np
+from statistics import geometric_mean
 import re
+from typing import Any
+from numpy.typing import NDArray
 
-class Formula(StrEnum):
-    CIE2000 = "cie2000"
-    CMC = "cmc"
+type RGBTuple = tuple[int, ...] | tuple[int, int, int]
 
-def parse_color(color: str) -> sRGBColor:
-    """
-    Parses a color string and converts it to an sRGBColor object.
+regex_patterns = {
+    "hex": re.compile(r'^#?([A-Fa-f0-9]{6})$'),
+    "rgb": re.compile(r'^\(?\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\)?$')
+}
 
-    Supports hex (e.g., #RRGGBB, #RGB), RGB (e.g., rgb(r, g, b)), 
-    and RGBA (e.g., rgba(r, g, b, a)) formats.
+def hex_to_rgb(hex_code: str) -> RGBTuple:
+    """Convert a hex code to an RGB tuple"""
+    hex_code = hex_code.lstrip('#')
+    return tuple(int(hex_code[i:i + 2], 16) for i in (0, 2, 4))
 
-    Args:
-        color (str): The color string to parse.
+def rgb_to_lab(rgb: RGBTuple):
+    """Convert an RGB tuple to LAB color space."""
+    rgb_normalized = np.array(rgb) / 255.0
+    return rgb2lab(rgb_normalized[np.newaxis, np.newaxis, :])[0][0]
 
-    Returns:
-        sRGBColor: The sRGBColor object representing the input color.
+def validate_rgb(rgb: str | RGBTuple) -> RGBTuple:
+    """Validate and convert an input string into an RGB tuple if possible."""
+    if isinstance(rgb, tuple) and len(rgb) == 3 and all(0 <= val <= 255 for val in rgb):
+        return rgb
+    elif isinstance(rgb, str):
+        if match := regex_patterns["rgb"].match(rgb):
+            rgb_tuple = tuple(map(int, match.groups()))
+            if all(0 <= val <= 255 for val in rgb_tuple):
+                return rgb_tuple
+    raise ValueError("Invalid RGB input. Expected a tuple of three integers between 0 and 255 or a string formatted as 'R, G, B'.")
+            
+def validate_hex(hex_code: str) -> str:
+    """Validate if a string is a valid hex color code."""
+    if isinstance(hex_code, str) and regex_patterns["hex"].match(hex_code):
+        return hex_code
+    raise ValueError("Invalid hex input. Expected a hex string like '#RRGGBB'.")
 
-    Raises:
-        ValueError: If the color format is not supported.
-    """
-    color = color.strip()
-    if color.startswith("#"):
-        try:
-            return sRGBColor.new_from_rgb_hex(color)
-        except ValueError:
-            raise ValueError(f"Invalid hex code format: {color}")
-    if color.startswith('rgb'):
-        numbers = list(map(float, re.findall(r'\d+', color)))
-        if len(numbers) == 3:
-            return sRGBColor(numbers[0] / 255.0, numbers[1] / 255.0, numbers[2] / 255.0, is_upscaled=True)
-        elif len(numbers) == 4:  # Ignore alpha in RGBA
-            return sRGBColor(numbers[0] / 255.0, numbers[1] / 255.0, numbers[2] / 255.0, is_upscaled=True)
-        else:
-            raise ValueError(f"Invalid RGB/RGBA format: {color}")
+def closest_color(input_color: str | RGBTuple | Any, color_list: list[str]):
+    """Find the closest color in a list of hex codes to the input RGB or hex color."""
+    # Convert input color to RGB and LAB
+    if isinstance(input_color, str) and input_color.startswith('#'):
+        input_rgb = hex_to_rgb(validate_hex(input_color))
+    elif isinstance(input_color, str) or isinstance(input_color, tuple):
+        input_rgb = validate_rgb(input_color)
     else:
-        raise ValueError(f"Unsupported color format: {color}")
+        raise ValueError("Invalid input color format.")
     
-def calculate_color_difference(color1: sRGBColor, color2: sRGBColor, formula: Formula) -> float:
-    """
-    Calculates the color difference between two sRGBColor objects using a specified Delta E formula.
-
-    Converts sRGBColor objects to LAB color space and computes perceptual differences using the chosen formula.
-
-    Args:
-        color1 (sRGBColor): The first color object.
-        color2 (sRGBColor): The second color object.
-        formula (Formula): The Delta E formula to use.
-
-    Returns:
-        float: The color difference between the two colors using the specified formula.
-
-    Raises:
-        ValueError: If the formula is not supported.
-    """
-    lab1 =  convert_color(color1, LabColor)
-    lab2 = convert_color(color2, LabColor)
+    input_lab = rgb_to_lab(input_rgb)
     
-    if formula == Formula.CIE2000:
-        return delta_e_cie2000(lab1, lab2)
-    elif formula == Formula.CMC:
-        return delta_e_cmc(lab1, lab2)
-    else:
-        raise ValueError(f"Unsupported formula: {formula}")
+    # Convert the color list to LAB
+    colors_rgb = [hex_to_rgb(validate_hex(hex_code)) for hex_code in color_list]
+    colors_lab = [rgb_to_lab(rgb) for rgb in colors_rgb]
     
-def find_closest_color(input_color: str, color_list: list[str]) -> str | None:
-    """
-    Finds the closest color from a list of hex color codes to the input color.
-
-    Uses the geometric mean of Delta E CIEDE2000 and Delta E CMC to determine the closest match.
-
-    Args:
-        input_color (str): The input color string in a supported format.
-        color_list (list[str]): A list of hex color strings to compare against.
-
-    Returns:
-        Union[str, None]: The closest hex color string from the list, or None if no match is found.
-    """
-    input_rgb = parse_color(input_color)
+    # Calculate Delta E CMC and Delta E 2000 for each color
+    delta_e_cmc = [deltaE_cmc(input_lab, lab) for lab in colors_lab]
+    delta_e_2000 = [deltaE_ciede2000(input_lab, lab) for lab in colors_lab]
     
-    delta_e_2000_values = [calculate_color_difference(input_rgb, parse_color(c), formula=Formula.CIE2000) for c in color_list]
-    delta_e_cmc_values  = [calculate_color_difference(input_rgb, parse_color(c), formula=Formula.CMC) for c in color_list]
+    # Calculate geometric mean of both Delta E values using statistics.geometric_mean
+    geometric_means = [geometric_mean([cmc, de2000]) for cmc, de2000 in zip(delta_e_cmc, delta_e_2000)]
     
-    combined_values = [np.sqrt(delta_e_2000_value * delta_e_cmc_value) for delta_e_2000_value, delta_e_cmc_value in zip(delta_e_2000_values, delta_e_cmc_values)]
-
-    # Find the index of the smallest combined item
-    closest_index = combined_values.index(min(combined_values))
+    # Find the index of the closest color
+    closest_idx = np.argmin(geometric_means)
     
-    return color_list[closest_index]
+    # Print the results
+    print("Closest color using Delta E CMC:")
+    print(f"Hex: {color_list[np.argmin(delta_e_cmc)]}, RGB: {colors_rgb[np.argmin(delta_e_cmc)]}, Delta E CMC: {min(delta_e_cmc)}")
 
+    print("\nClosest color using Delta E 2000:")
+    print(f"Hex: {color_list[np.argmin(delta_e_2000)]}, RGB: {colors_rgb[np.argmin(delta_e_2000)]}, Delta E 2000: {min(delta_e_2000)}")
+
+    print("\nClosest color using Geometric Mean of Delta E CMC and Delta E 2000:")
+    print(f"Hex: {color_list[closest_idx]}, RGB: {colors_rgb[closest_idx]}, Geometric Mean: {geometric_means[closest_idx]}")
+    
 def main():
-    """
-    Main function to handle user input and find the closest color.
+    """Main function to handle user input and run the closest color calculation."""
+    print("Enter the input color (hex code like '#RRGGBB' or RGB as 'R, G, B'):")
+    input_color = input().strip()
 
-    Prompts the user to enter a color and a list of colors (as hex codes), 
-    then finds and displays the closest matching color from the list.
-    """
-    input_color = input("Enter a color (hex, RGB, RGBA): ").strip()
-    color_list = input("Enter a list of hex colors (comma-separated, e.g., #FF5733, #3498db): ").strip().split(',')
-    
+    print("Enter a list of hex codes to compare against, separated by commas (e.g., '#FF5733, #33FF57, #3357FF'):")
+    color_list = [color.strip() for color in input().split(',')]
+
     try:
-        closest = find_closest_color(input_color, [color for color in color_list])
-        print(f"The closest color to {input_color} is {closest}.")
+        closest_color(input_color, color_list)
     except ValueError as e:
         print(f"Error: {e}")
         
