@@ -1,9 +1,40 @@
 import argparse
 import fileinput
 import logging
-import re
 from pathlib import Path
+import re
+from pprint import pprint
 
+regex_patterns = {
+    "url_pattern": re.compile(r'(https?://[^\s]+)'),
+    "split_pattern": re.compile(r'(https?://[^\s]+?)(?=https?://|$)')
+}
+
+def split_urls(content: str) -> set[str]:
+    """Splits concatenated URLs in the content, capturing full URLs.
+
+    Args:
+        content (str): The string containing concatenated URLs.
+
+    Returns:
+        list[str]: A list of separated URLs.
+    """
+    print(content)
+    # Use regex to find all URLs, including those directly concatenated
+    urls = re.findall(regex_patterns['url_pattern'], content)
+    
+    # Further split any remaining concatenated URLs
+    seperated_urls = []
+    for url in urls:
+        print(url)
+        if url.count('http') > 1:
+            sub_urls = re.findall(regex_patterns["split_pattern"], url)
+            seperated_urls.extend(sub_urls)
+        else:
+            seperated_urls.append(url)
+    
+    return set(seperated_urls)
+    
 
 def clean_links(input_files: list[str], output_file: str | None = None) -> None:
     """Cleans text files by removing all non-link content and leaving only links.
@@ -29,10 +60,6 @@ def clean_links(input_files: list[str], output_file: str | None = None) -> None:
             "Cannot specify an output file when processing multiple input files."
         )
 
-    # Compile the regular expression for finding URLs
-    url_pattern: re.Pattern[str] = re.compile(
-        r"http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+"
-    )
 
     output_path: Path | None = Path(output_file).resolve() if output_file else None
 
@@ -43,30 +70,29 @@ def clean_links(input_files: list[str], output_file: str | None = None) -> None:
             raise FileNotFoundError(f"File not found: {input_path}")
 
         try:
-            with fileinput.input(
-                input_path, inplace=(output_path is None), backup=".bak"
-            ) as file:
+            with input_path.open("r") as file:
                 # Open output file if specified
-                out = output_path.open("w") if output_path else None
+                out = output_path.open("w+") if output_path else None
+                inp = input_path.open("w+")
+                links: set[str] = set()
                 for line in file:
+                    print(line)
                     try:
-                        links: set[str] = set(url_pattern.findall(line))
-                        if links:
-                            output: str = "\n".join(links) + "\n"
-                            if out:
-                                out.write(output)
-                            else:
-                                print(output, end="")
-                    except re.error as regex_error:
-                        logging.error(
-                            f"Regex error while processing line in {input_file}: {regex_error}"
-                        )
+                        # Split concaenated URLs dynamically
+                        links.update(split_urls(line))
                     except (IOError, OSError) as io_error:
                         logging.error(
                             f"I/O error while writing to {output_file if output_file else input_file}: {io_error}"
                         )
-            if out:
-                out.close()
+                # Write all accumulated links to the output file at once
+                if links:
+                    
+                    if out:
+                        out.write("")  # Clear existing file contents before writing
+                        out.writelines(links)
+                    else:
+                        inp.writelines(links)
+
             logging.info(f"Processing complete for {input_file}")
         except (FileNotFoundError, IOError, OSError) as file_error:
             logging.error(f"Error processing file {input_file}: {file_error}")
@@ -84,6 +110,7 @@ if __name__ == "__main__":
     parser.add_argument("-o", "--output", help="Optional path to output file")
     args: argparse.Namespace = parser.parse_args()
 
+        
     try:
         clean_links(args.input_files, args.output)
     except ValueError as val_error:
