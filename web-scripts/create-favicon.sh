@@ -65,7 +65,7 @@ TMP_DIR=$(mktemp -d)
 
 # Loop through each size and export the PNG file
 for size in "${sizes[@]}"; do
-  inkscape "$INPUT_FILE" --export-type=png --export-width="${size}" --export-png-color-mode=RGBA_16 | pngquant --force --ext .png --speed 1 --quality=65-80 >"${TMP_DIR}/icon_${size}x${size}.png"
+  inkscape "$INPUT_FILE" --export-type=png --export-width="${size}" --export-filename=- --export-png-color-mode=RGBA_16 | pngquant --ext .png --speed 1 --quality=65-80 - >"${TMP_DIR}/icon_${size}x${size}.png"
 done
 
 # Combine PNGs into a single ICO file
