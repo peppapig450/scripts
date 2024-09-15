@@ -1,13 +1,24 @@
 import argparse
-import subprocess
-import os
 import logging
-import requests
-import shutil
+import os
+import subprocess
+import tempfile
+from pathlib import Path
 
+import requests
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# Fetch API Key from environment variable
+IMGIX_API_KEY = os.getenv("IMGIX_API_KEY")
+IMGIX_SOURCE_ID = os.getenv("IMGIX_SOURCE_ID")
+
+if IMGIX_API_KEY is None:
+    raise ValueError("IMGIX_API_KEY is not set in the .env file")
+
+if IMGIX_SOURCE_ID is None:
+    raise ValueError("IMGIX_SOURCE_ID is not set in the .env file")
 
 
 class EncodingError(Exception):
@@ -32,9 +43,9 @@ def build_downscaling_filter(width: int, height: int | None = -1):
     return f"scale={width}:{height}:flags=lanczos+accurate_rnd+full_chroma_int+full_chroma_inp"
 
 
-def convert_video(input_file: str, output_base: str):
-    vp9_file = f"{output_base}.webm"
-    h264_file = f"{output_base}.mp4"
+def convert_video(input_file: Path, output_base: Path):
+    vp9_file = output_base.with_suffix(".webm")
+    h264_file = output_base.with_suffix(".mp4")
 
     try:
         # TODO: args for optional height and width changes
@@ -59,18 +70,18 @@ def convert_video(input_file: str, output_base: str):
 
 
 def run_vp9_pass(
-    input_file: str,
+    input_file: Path,
     downscale_filter: str,
     pass_num: int,
     speed: int,
-    output: str | None = None,
+    output: Path | None = None,
 ):
     """Helper function to run a single VP9 pass"""
     try:
         # fmt: off
         cmd = [
             "ffmpeg",
-            "-i", input_file,
+            "-i", str(input_file),
             "-vf", downscale_filter,
             "-c:v", "vp9",
             "-r", "30",
@@ -89,7 +100,7 @@ def run_vp9_pass(
         if pass_num == 1:
             cmd.extend(["-f", "null", os.devnull])
         elif output:
-            cmd.append(output)
+            cmd.append(str(output))
 
         logging.info(f"Starting pass {pass_num} for {input_file}...")
         subprocess.run(cmd, check=True)
@@ -98,7 +109,9 @@ def run_vp9_pass(
         raise VP9EncodingError(f"Pass {pass_num} failed") from e
 
 
-def convert_video_vp9_two_pass(input_file: str, downscale_filter: str, output_vp9: str):
+def convert_video_vp9_two_pass(
+    input_file: Path, downscale_filter: str, output_vp9: Path
+):
     """Performs 2-pass VP9 encoding."""
     # 1st pass
     run_vp9_pass(input_file, downscale_filter, pass_num=1, speed=4, output=None)
@@ -111,13 +124,13 @@ def convert_video_vp9_two_pass(input_file: str, downscale_filter: str, output_vp
     )
 
 
-def convert_video_h264(input_file: str, downscale_filter: str, output_h264: str):
+def convert_video_h264(input_file: Path, downscale_filter: str, output_h264: Path):
     """Performs h264 encoding."""
     try:
         # fmt: off
         cmd = [
             "ffmpeg",
-            "-i", input_file,
+            "-i", str(input_file),
             "-vf", downscale_filter,
             "-c:v", "libx264",
             "-crf", "18",
@@ -128,7 +141,7 @@ def convert_video_h264(input_file: str, downscale_filter: str, output_h264: str)
             "-movflags", "+faststart",
             "-map_metadata", "-1",
             "-an",
-            output_h264,
+            str(output_h264),
         ]
         # fmt: off
         
@@ -136,3 +149,89 @@ def convert_video_h264(input_file: str, downscale_filter: str, output_h264: str)
     except subprocess.CalledProcessError as e:
         logging.error(f"Error during h264 encoding: {e}")
         raise H264EncodingError(f"Encoding {input_file} to {output_h264} failed") from e
+
+
+def cleanup_temp_files(files: list[Path]):
+    """Remove temporary files created during encoding"""
+    for file in files:
+        if file.exists():
+            logging.info(f"Cleaning up temporary file: {file}")
+            try:
+                file.unlink()
+            except OSError as e:
+                logging.error(f"Error deleting {file}: {e}")
+
+
+def upload_file_to_imgix(file_path: Path, origin_path: str):
+    """Uploads a file to Imgix source"""
+    url = f"https://api.imgix.com/api/v1/sources/{IMGIX_SOURCE_ID}/upload/{origin_path}"
+    headers = {
+        "Authorization": f"Bearer {IMGIX_API_KEY}",
+        "Content-Type": "application/octet-stream",
+    }
+
+    # Read the file as binary
+    with file_path.open("rb") as file_data:
+        response = requests.post(url, headers=headers, data=file_data)
+
+    if response.status_code == 200:
+        logging.info(f"File {file_path} uploaded successfully.")
+        logging.info(f"Asset URL: {response.json()['data']['attributes']['url']}")
+    else:
+        logging.error(f"Failed to upload file: {response.status_code}")
+        logging.error(response.text)
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Convert video to VP9 and H264, then upload to imgix."
+    )
+    parser.add_argument("input_file", help="Input video file")
+    parser.add_argument(
+        "output_name", help="Base name for the output files (extensions will be added)"
+    )
+    parser.add_argument("upload_url", help="URL to upload the file to imgix")
+
+    args = parser.parse_args()
+
+    input_file = Path(args.input_file)
+    output_base = args.output_base
+
+    # Check to make sure input file exists
+    if not input_file.exists():
+        error_msg = f"Input file {input_file} does not exist."
+        logging.error(error_msg)
+        raise ValueError(error_msg)
+
+    # Get the basenames for upload to imgix
+    vp9_origin_path = f"{output_base}.webm"
+    h264_origin_path = f"{output_base}.mp4"
+
+    # create temp dir for files
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_dir_path = Path(temp_dir)
+        output_vp9 = Path()
+        output_h264 = Path()
+
+        try:
+            # Convert video to VP9 and H264
+            output_vp9, output_h264 = convert_video(
+                input_file, temp_dir_path / output_base
+            )
+
+            # Upload files
+            upload_file_to_imgix(output_vp9, vp9_origin_path)
+            upload_file_to_imgix(output_h264, h264_origin_path)
+
+        except Exception as e:
+            logging.error(f"An error occurred: {e}")
+
+        finally:
+            # remove temp files
+            cleanup_temp_files([output_vp9, output_h264])
+
+            logging.info(f"Temporary directory {temp_dir} cleaned up.")
+
+
+if __name__ == "__main__":
+    main()
