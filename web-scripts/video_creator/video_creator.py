@@ -144,7 +144,7 @@ def convert_video_h264(input_file: Path, downscale_filter: str, output_h264: Pat
             str(output_h264),
         ]
         # fmt: off
-        
+
         subprocess.run(cmd, check=True)
     except subprocess.CalledProcessError as e:
         logging.error(f"Error during h264 encoding: {e}")
@@ -190,7 +190,6 @@ def main():
     parser.add_argument(
         "output_name", help="Base name for the output files (extensions will be added)"
     )
-    parser.add_argument("upload_url", help="URL to upload the file to imgix")
 
     args = parser.parse_args()
 
