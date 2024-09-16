@@ -188,7 +188,7 @@ def main():
     )
     parser.add_argument("input_file", help="Input video file")
     parser.add_argument(
-        "output_name", help="Base name for the output files (extensions will be added)"
+        "output_base", help="Base name for the output files (extensions will be added)"
     )
 
     args = parser.parse_args()
