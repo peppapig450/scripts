@@ -4,13 +4,42 @@ param (
     [string]$OutputDirectory # Directory where JSON files will be saved
 )
 
+# Validate input parameters
+if ([string]::IsNullOrWhiteSpace($InputFilePath)) {
+    Write-Error "InputFilePath is "
+}
+
+if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
+    Write-Error "OutputDirectory is required and cannot be empty."
+    exit 1
+}
+
+# Ensure the input file exists
+if (!(Test-Path $InputFilePath)) {
+    Write-Error "The input file '$InputFilePath' does not exist."
+    exit 1
+}
+
 # Ensure the ouput directory exists
 if (!(Test-Path $OutputDirectory)) {
-    New-Item -ItemType Directory -Path $OutputDirectory | Out-Null
+    try {
+        New-Item -ItemType Directory -Path $OutputDirectory | Out-Null
+    }
+    catch {
+        Write-Error "Failed to create output directory '$OutputDirectory'."
+        exit 1
+    }
 }
 
 # Read the input file
-$content = Get-Content -Path $InputFilePath
+try {
+    $content = Get-Content -Path $InputFilePath
+}
+catch {
+    Write-Error "Failed to read the input file '$InputFilePath'."
+    exit 1
+}
+
 
 # Initialize variables
 $filename = ""
@@ -22,7 +51,14 @@ foreach ($line in $content) {
         # If there is existing data save it to a JSON file
         if ($filename -ne "" -and $jsonData.Count -gt 0) {
             $jsonOutputPath = Join-Path -Path $OutputDirectory -ChildPath $filename
-            $jsonData | ConvertTo-Json -Depth 3 | Set-Content -Path $jsonOutputPath
+            try {
+                $jsonData | ConvertTo-Json -Depth 3 | Set-Content -Path $jsonOutputPath
+            }
+            catch {
+                Write-Error "Failed to write to JSON file '$jsonOutputPath'."
+                exit 1
+            } 
+
         }
 
         # Start a new JSON object
@@ -38,9 +74,16 @@ foreach ($line in $content) {
 }
 
 # Save the last JSON file
+# Save the last JSON file
 if ($filename -ne "" -and $jsonData.Count -gt 0) {
     $jsonOutputPath = Join-Path -Path $OutputDirectory -ChildPath $filename
-    $jsonData | ConvertTo-Json -Depth 3 | Set-Content -Path $jsonOutputPath
+    try {
+        $jsonData | ConvertTo-Json -Depth 3 | Set-Content -Path $jsonOutputPath -Encoding UTF8
+    }
+    catch {
+        Write-Error "Failed to write to JSON file '$jsonOutputPath'."
+        exit 1
+    }
 }
 
 Write-Output "JSON files have been created successfully in $OutputDirectory"
