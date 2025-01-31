@@ -17,7 +17,7 @@
 
 .PARAMETER CustomOptions
     Custom options (as a single string) to pass to ImageMagick's convert command (optional).
-
+0C
 .PARAMETER Recurse
     Switch to indicate whether to process files in subdirectories.
 
@@ -198,10 +198,14 @@ foreach ($item in $filesToProcess) {
     }
 
     # Call ImageMagick 7
-    $arguments = @($inputFile) + $customArgs + @($outputFile)
+    $arguments = @("`"$inputFile`"") + $customArgs + @("`"$outputFile`"")
 
     if ($TestRun) {
-        Write-Host "Test Run: `"$MagickPath`" $($arguments -join ' ')"
+        # Create a quoted version of the command for display purposes
+        $quotedArgs = $arguments | ForEach-Object {
+            if ($_ -match '\s') { '"{0}"' -f $_ } else { $_ }
+        }
+        Write-Host "Test Run: `"$MagickPath`" $($quotedArgs -join ' ')"
         continue
     }
 
