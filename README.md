@@ -1,6 +1,28 @@
 # Scripts
 Collection of all my scripts for Windows, MacOS, and all my Linux systems.
 
+## Structure
+
+- **python/**: Python scripts
+  - **analysis/**: Code and data analysis tools
+  - **file_utils/**: File manipulation utilities
+  - **git/**: Git-related tools
+  - **image/**: Image processing scripts
+  - **media/**: Media conversion tools
+  - **misc/**: Miscellaneous scripts (color, mega subdirs)
+  - **system/**: System-level utilities
+  - **llm_utils/**: Tools for LLM-related tasks
+- **shell/**: Shell scripts
+  - **general/**: General-purpose scripts
+  - **linux/**: Linux-specific scripts
+  - **macos/**: macOS-specific scripts
+  - **monitoring/**: Monitoring tools
+  - **system/**: System management scripts
+- **powershell/**: PowerShell scripts
+  - **general/**: General-purpose utilities
+  - **vm/**: Virtual machine tools
+  - **modules/**: PowerShell modules (e.g., RealPath)
+
 ## Naming Conventions:
 This is an overview of my wacky/unorthodox naming conventions.
 
