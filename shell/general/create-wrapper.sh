@@ -1,131 +1,166 @@
-#!/bin/bash
-set -eu
+#!/usr/bin/env bash
+# ---------------------------------------------------------------------------
+#  create-wrapper.sh
+#
+#  Generate a tiny launcher in $BIN_DIR that runs a target Python script.
+#  The launcher lets you invoke the script from anywhere as a normal command.
+#
+#  Usage:
+#     create-wrapper.sh -s <name> -p <path> [-d <bin_dir>] [-r]
+#
+#  Options:
+#     -s  Base name of the Python script (without .py extension).
+#     -p  Directory in which to search (recursively) for <name>.py.
+#     -d  Directory to place the wrapper (default: ~/.local/bin).
+#     -r  Create a relative symlink + wrapper instead of embedding an
+#         absolute path (useful if the tree may be moved as a unit).
+#     -h  Show help.
+#
+#  Exit codes:
+#     0   success
+#     1   argument or runtime error
+# ---------------------------------------------------------------------------
+set -euo pipefail
+shopt -s globstar nullglob      # enable ** recursive globbing (needed by find_script)
 
-# Enable globstar and extglob to use later for finding the script
-shopt -s globstar
+# ============================================
+# Helper functions
+# ============================================
 
-# Default values
-DEFAULT_BIN_DIR="$HOME/.local/bin"
-BIN_DIR="$DEFAULT_BIN_DIR"
-PYTHON_SCRIPT_NAME=""
-PYTHON_SCRIPT_PATH=""
-USE_RELATIVE=false
-
-# Function to display usage information
 usage() {
-    echo "Usage: $0 -s <script_name> -p <script_path> [-d <bin_directory>] [-r]"
-    echo "  -s  Name of the Python script (without .py extension)"
-    echo "  -p  Path to the Python script (can be relative or absolute)"
-    echo "  -d  Directory to place the wrapper script or symlink (default: $DEFAULT_BIN_DIR)"
-    echo "  -r  Use relative path and create a symlink in the specified directory"
-    exit 1
+  # Display help and exit
+  cat <<CLOSEENOUGH
+Usage: $0 -s <name> -p <path> [-d <bin_dir>] [-r]
+
+Generate a wrapper that executes <path>/<name>.py.
+
+  -s  Script base name (without .py)
+  -p  Directory containing the script (searched recursively)
+  -d  Where to install the wrapper (default: ~/.local/bin)
+  -r  Use a relative symlink instead of an absolute file path
+  -h  Show this help
+CLOSEENOUGH
+  exit 1
 }
 
-# Function to check if the bin dir exists and is in the path
+in_path() {
+  # Return success if the first argument appears verbatim in PATH
+  local dir="${1}"
+  [[ ":${PATH}:" == *":${dir}:"* ]]
+}
+
 verify_bin_dir() {
-    local TARGET_DIR="$1"
-    
-    if [[ ! -d $TARGET_DIR ]]; then
-        echo "${TARGET_DIR} doesn't exist, exiting."
-        return 1
-    fi
-    
-    if [[ $PATH =~ $TARGET_DIR: ]]; then
-        return 0
-    else
-        echo "$TARGET_DIR exists, but is not in the \$PATH"
-        return 1
-    fi
+  # Ensure $1 exists; offer to create it and warn if not in PATH
+  local dir="${1}"
+  if [[ ! -d ${dir} ]]; then
+    read -rp "${dir} does not exist. Create it? [y/N] " ans
+    [[ ${ans} =~ ^[Yy] ]] || return 1
+    mkdir -p "${dir}"
+  fi
+
+  # shellcheck disable=SC2310
+  if ! in_path "${dir}"; then
+    printf "%s is not in \$PATH.\n" "${dir}"
+    printf 'Add to your profile:\n  export PATH="%s:\$PATH"\n' "${dir}"
+  fi
 }
 
-# Parse command-line options
-while getopts ":s:p:d:r" opt; do
-    case $opt in
-        s)
-            PYTHON_SCRIPT_NAME=$OPTARG
-        ;;
-        p)
-            PYTHON_SCRIPT_PATH=$OPTARG
-        ;;
-        d)
-            BIN_DIR=$OPTARG
-        ;;
-        r)
-            USE_RELATIVE=true
-        ;;
-        \?)
-            echo "Invalid option: -$OPTARG" >&2
-            usage
-        ;;
-        :)
-            echo "Option -$OPTARG requires an argument." >&2
-            usage
-        ;;
-        *)
-            usage
-        ;;
+find_script() {
+  # Locate <name>.py inside <path>, returning the absolute path via stdout.
+  local name="${1}"
+  local search_dir="${2}"
+  
+  if [[ -f ${search_dir}/${name}.py ]]; then
+    realpath "${search_dir}/${name}.py"
+    return 0
+  fi
+
+  # Recursive glob; fail if zero or multiple matches.
+  mapfile -t matches < <(printf '%s\n' "${search_dir}"/**/"${name}.py")
+  case ${#matches[@]} in 
+    0) printf 'Error: %s.py not found under %s\n' "${name}" "${search_dir}" >&2; return 1 ;;
+    1) realpath "${matches[0]}" ;;
+    *) printf 'Error: Multiple %s.py found under %s\n' "${name}" "${search_dir}" >&2; return 1 ;;
+  esac
+}
+
+choose_python() {
+  # Echo the preferred Python executable.
+  if command -v python3 >/dev/null 2>&1; then
+    echo python3
+  elif command -v python >/dev/null 2>&1; then
+    echo python
+  else
+    printf 'Error: No python interpreter found in PATH\n' >&2
+    return 1
+  fi
+}
+
+create_wrapper() {
+  # Create the wrapper script and (optionally) a relative symlink.
+  local script_name="${1}"
+  local abs_script_path="${2}"
+  local bin_dir="${3}"
+  local use_relative="${4}"
+
+  local target_path="${abs_script_path}"
+  local wrapper_path="${bin_dir}/${script_name}"
+  local python_exec
+  python_exec="$(choose_python)"
+
+  # Optional symlink pointing from $bin_dir/$script_name.py -> absolute script
+  if [[ ${use_relative} == true ]]; then
+    ln -srn "${abs_script_path}" "${bin_dir}/${script_name}.py"
+    target_path="${script_name}.py" # Wrapper will find it relative to itself
+  fi
+
+  # Remove incomplete wrapper if anything below fails.
+  trap 'rm -f "${wrapper_path}"' ERR
+
+  cat >"${wrapper_path}" <<WRAPMEPLS
+#!/usr/bin/env bash
+# Auto generated by create-wrapper.sh - DO NOT EDIT.
+# Executes the real Python script next to this wrapper.
+
+exec "${python_exec}" "\${BASH_SOURCE[0]%/*}/${target_path}" "\$@"
+WRAPMEPLS
+
+  chmod u+x "${wrapper_path}"
+  printf 'Wrapper created at %s\n' "${wrapper_path}"
+}
+
+# ===========================
+# Main
+# ===========================
+
+main() {
+  local DEFAULT_BIN_DIR="${HOME}/.local/bin"
+  local bin_dir="${DEFAULT_BIN_DIR}"
+  local script_name='' script_path='' use_relative=false
+
+  # Parse options
+  while getopts ':s:p:d:rh' opt; do
+    case "${opt}" in
+      s) script_name="${OPTARG}" ;;
+      p) script_path="${OPTARG}" ;;
+      d) bin_dir="${OPTARG}" ;;
+      r) use_relative=true ;;
+      h) usage ;;
+      *) usage ;;
     esac
-done
+  done
 
-# Check if the script name and path are provided
-if [[ -z $PYTHON_SCRIPT_NAME ]] || [[ -z $PYTHON_SCRIPT_PATH ]]; then
-    echo "Error: Script name and script path are requried."
-    usage
-fi
+  [[ -n ${script_name} && -n ${script_path} ]] || { echo 'Missing -s or -p'; usage; }
 
-# If bin directory doesn't exist and isn't in $PATH, exit.
-# TODO: functionality to automatically crete an add to path maybe with an input read -p
-if ! verify_bin_dir "$BIN_DIR"; then
-    exit 1
-fi
+  # Prep target directory
+  verify_bin_dir "${bin_dir}"
 
-# Find the script specified using globbing, and get the realpath
-if [[ ! -f "${PYTHON_SCRIPT_PATH}/${PYTHON_SCRIPT_NAME}.py" ]]; then
-    
-    # Glob for script with .py extension in current dir and subdirectories
-    shopt -s nullglob
-    FOUND_SCRIPT=("$PYTHON_SCRIPT_PATH"/**/"${PYTHON_SCRIPT_NAME}.py")
-    shopt -u nullglob
-    
-    # Check if the script is found
-    if [[ ${#FOUND_SCRIPT[@]} -eq 0 ]]; then
-        echo "Error: Python script '$PYTHON_SCRIPT_NAME' not found in the target directory."
-        exit 1
-    else
-        ABSOLUTE_SCRIPT_PATH=$(realpath "${FOUND_SCRIPT[0]}")
-    fi
-else
-    ABSOLUTE_SCRIPT_PATH=$(realpath "${PYTHON_SCRIPT_PATH}/${PYTHON_SCRIPT_NAME}.py")
-fi
+  # Locate the Python script
+  local abs_script
+  abs_script="$(find_script "${script_name}" "${script_path}")" || exit 1
 
-# Location for the wraper script
-WRAPPER_SCRIPT_PATH="${BIN_DIR}/${PYTHON_SCRIPT_NAME}"
+  # Build the wrapper
+  create_wrapper "${script_name}" "${abs_script}" "${bin_dir}" "${use_relative}"
+}
 
-# If using relative path, create a symlink from the script we're wrapping around to the bin dir, and then the wrapper script
-if $USE_RELATIVE; then
-    SYMLINK_PATH="${BIN_DIR}/${PYTHON_SCRIPT_NAME}.py"
-    ln -sfrn "${ABSOLUTE_SCRIPT_PATH}" "$SYMLINK_PATH"
-    echo "Symlink created at $SYMLINK_PATH"
-    
-    # if symlink is created use the symlink as the absolute path for wrapper script
-    if [[ -L  $SYMLINK_PATH ]]; then
-        ABSOLUTE_SCRIPT_PATH="$SYMLINK_PATH"
-    fi
-fi
-
-if command -v python >/dev/null 2>&1; then
-    PYTHON_EXEC="python"
-else
-    PYTHON_EXEC="python3"
-fi
-
-# Create the wrapper script
-cat << EOF > "$WRAPPER_SCRIPT_PATH"
-#/usr/bin/env bash
-"$PYTHON_EXEC" "$ABSOLUTE_SCRIPT_PATH" "\$@"
-EOF
-
-# Make the wrapper script executable
-chmod u+x "$WRAPPER_SCRIPT_PATH"
-
-echo "Wrapper script created for $PYTHON_SCRIPT_NAME at $WRAPPER_SCRIPT_PATH"
+main "$@"
