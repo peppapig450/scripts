@@ -7,14 +7,13 @@
 # for reference. It optionally accepts a theme as a positional argument or falls back to the THEME environment variable.
 # Light palettes are excluded by default.
 
-set -euo pipefail
-
+set -Eeuo pipefail
 
 # --- Configuration --
 
-readonly wp_dir="${HOME}/media/Wallpapers" # Source directory for wallpapers
-readonly theme_dir="${HOME}/.cache/themed_wallpapers" # Directory for storing themed wallpapers
-readonly symlink_path="${HOME}/.config/.wallpaper" # Symlink to the current wallpapers
+readonly wp_dir="${HOME}/media/Wallpapers"                                                   # Source directory for wallpapers
+readonly theme_dir="${HOME}/.cache/themed_wallpapers"                                        # Directory for storing themed wallpapers
+readonly symlink_path="${HOME}/.config/.wallpaper"                                           # Symlink to the current wallpapers
 readonly transition_opts=(--transition-step 40 --transition-fps 60 --transition-type center) # swww transition settings
 
 # --- Functions ---
@@ -41,12 +40,12 @@ check_dependencies() {
   local missing=()
 
   for cmd in lutgen swww; do
-    if ! command -v "${cmd}" >/dev/null 2>&1; then
+    if ! command -v "${cmd}" > /dev/null 2>&1; then
       missing+=("${cmd}")
     fi
   done
 
-  if (( ${#missing[@]} > 0 )); then
+  if ((${#missing[@]} > 0)); then
     die "Missing required commands: ${missing[*]}"
   fi
 }
@@ -69,11 +68,17 @@ get_available_themes() {
 # Randomly pick a wallpaper from the specified directory
 #
 pick_random_wallpaper() {
-  shopt -s nullglob globstar
-  local wallpapers=("${wp_dir}"/**/*.{jpg,jpeg,png,gif,heif,webp,avif})
+  local -a wallpapers
 
-  (( ${#wallpapers[@]} > 0 )) || die "No wallpapers found in ${wp_dir}"
+  # Use compgen -G + extglob for fast case-insensitive globbing
+  shopt -s -- extglob
+  mapfile -t wallpapers < <(compgen -G -- \
+    "${wp_dir}/**/*.+(j|J)p?(e|E)g" \
+    "${wp_dir}/**/*/*.{png,gif,webp,heic,heif,avif}")
 
+  ((${#wallpapers[@]} > 0)) || die "No wallpapers found in ${wp_dir}"
+
+  shopt -u -- extglob
   printf '%s\n' "${wallpapers[RANDOM % ${#wallpapers[@]}]}"
 }
 
@@ -106,7 +111,7 @@ apply_theme() {
 
   if [[ ! -f ${output_file} ]]; then
     log "Apply theme '${theme}' to wallpaper."
-    lutgen apply -p "${theme}" -o "${output_file}" -S "${input_file}"  # Use Shepards Method with lutgen
+    lutgen apply -p "${theme}" -o "${output_file}" -S "${input_file}" # Use Shepards Method with lutgen
   else
     log "Using cached themed wallpaper."
   fi
