@@ -95,6 +95,30 @@ logging::log_fatal() {
   exit 1
 }
 
+# logging::init SCRIPT_NAME
+# Initializes logging for the current script.
+#
+# Sets the global LOGGING_SCRIPT_NAME variable for log prefixing
+# and automatically wires up both error (ERR) and exit (EXIT) traps.
+# This enables consistent, script-tagged log output and ensures cleanup
+# behavior runs even on graceful exits.
+#
+# Usage:
+#   logging::init "$0"
+#
+# This should be called once after sourcing logging.shlib.
+logging::init() {
+  if (($# != 1)); then
+    logging::log_warn "logging::init requires a script name argument."
+    return 1
+  fi
+
+  local source_path="${1:-${BASH_SOURCE[1]}}"
+  if [[ -n ${source_path} ]]; then
+    declare -gx LOGGING_SCRIPT_NAME="$(basename "$(realpath "${source_path}")" 2> /dev/null || echo "(unknown)")"
+  fi
+}
+
 # logging::trap_err_handler
 # A trap-safe fatal error logger. Logs an error message with source and line,
 # then exits the script. Use this in a trap, e.g.:
