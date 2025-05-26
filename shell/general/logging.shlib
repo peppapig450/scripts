@@ -24,7 +24,7 @@
 set -Eeuo pipefail
 
 # Bail if we're not being sourced
-(return 0 2>/dev/null) || {
+(return 0 2> /dev/null) || {
   printf "This script is meant to be sourced, not executed.\n" >&2
   exit 1
 }
@@ -35,13 +35,13 @@ _detect_shell() {
   if [ -r "/proc/$$/exe" ]; then
     basename "$(readlink /proc/$$/exe)"
   else
-    basename "$(ps -p $$ -o comm= 2>/dev/null)"
+    basename "$(ps -p $$ -o comm= 2> /dev/null)"
   fi
 }
 
 # if not bash, complain and bail
 if [ -z "${BASH_VERSION-}" ]; then
-  shell="$(_detect_shell 2>/dev/null || echo unknown)"
+  shell="$(_detect_shell 2> /dev/null || echo unknown)"
   printf 'Error: this script requires Bash. You appear to be running in %s.\n' \
     "${shell}" >&2
   return 1
@@ -106,7 +106,7 @@ logging::add_err_trap() {
         if (/^trap -- '\''([^'\'']*)'\'' ERR$/) {
             print "$1"; # Print just the command portion inside the single quotes
         }
-    ' <<<"$(trap -p ERR)" || true)"
+    ' <<< "$(trap -p ERR)" || true)"
 
   if [[ -z ${existing:-} ]]; then
     trap -- 'logging::trap_err_handler' ERR
