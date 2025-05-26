@@ -117,6 +117,9 @@ logging::init() {
   if [[ -n ${source_path} ]]; then
     declare -gx LOGGING_SCRIPT_NAME="$(basename "$(realpath "${source_path}")" 2> /dev/null || echo "(unknown)")"
   fi
+
+  # Setup traps
+  logging::setup_traps
 }
 
 # logging::trap_err_handler
@@ -152,3 +155,33 @@ logging::add_err_trap() {
   fi
 }
 
+# logging::cleanup
+# Unsets any global logging state (e.g., script name)
+logging::cleanup() {
+  unset LOGGING_SCRIPT_NAME
+}
+
+# logging::add_exit_trap
+# Appends logging::cleanup to the EXIT trap without overwriting it.
+logging::add_exit_trap() {
+  local existing
+
+  existing="$(perl -lne '
+    if (/^trap -- '\''([^'\'']*)'\'' EXIT$/) {
+      print "$1"
+    }
+  ' <<< "$(trap -p EXIT)" || true)"
+
+  if [[ -z ${existing:-} ]]; then
+    trap -- 'logging::cleanup' EXIT
+  else
+    trap -- "$(printf '%s; logging::cleanup' "$existing")" EXIT
+  fi
+}
+
+# logging::setup_traps
+# Sets up both ERR and EXIT traps for error logging and cleanup.
+logging::setup_traps() {
+  logging::add_err_trap
+  logging::add_exit_trap
+}
