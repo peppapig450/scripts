@@ -54,8 +54,9 @@ fi
 logging::log() {
   local level="${1^^}" # Capitalize input for case-insensitive matching
   shift
-  local ts
+  local ts script="${LOGGING_SCRIPT_NAME:-}"
   ts="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+
   local color_reset=$'\033[0m' # Use ANSI-C quoting
   local color
 
@@ -70,8 +71,20 @@ logging::log() {
       ;;
   esac
 
+  local -a fmt_parts args
+  fmt_parts+=("%b" "[%s]" "[%s]") # Color, timestamp, level
+  args+=("${color}" "${ts}" "${level}")
+
+  if [[ -n ${script} ]]; then
+    fmt_parts+=("[%s]") # Script name
+    args+=("${script}")
+  fi
+
+  fmt_parts+=("%s%b\n")
+  args+=("$*" "${color_reset}")
+
   # Send to stderr like a good log citizen
-  LC_ALL=C printf "%b[%s] [%s] %s%b\n" "${color}" "${ts}" "${level}" "$*" "${color_reset}" >&2
+  LC_ALL=C printf "${fmt_parts[*]}" "${args[@]}" >&2
 }
 
 logging::log_info() { logging::log INFO "$@"; }
