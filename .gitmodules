@@ -1,0 +1,3 @@
+[submodule "unix/systemd"]
+	path = unix/systemd
+	url = git@github.com:peppapig450/ssh-agent-setup
