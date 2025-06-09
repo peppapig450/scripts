@@ -1,58 +1,191 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# logging.shlib — Logging utilities for Bash scripts
+# logging.shlib — Portable path helpers, global-var utilities, and colorized logging
 #
-# This library provides timestamped, color-coded log output and error handling
-# utilities suitable for CI pipelines or general-purpose scripting.
+# A Bash library offering:
+#   • Path utilities:
+#       – Path_resolve   Resolve file paths via realpath/readlink or fallback
+#       – Path_basename  Extract filename without spawning external basename
+#   • Variable utilities:
+#       – set_global            Declare and cleanup globals safely across Bash versions
+#       – capitalize_variable   Uppercase a string portably (tr^ fallback)
+#   • Structured logging:
+#       – Levels: INFO, WARN, ERROR, FATAL
+#       – ISO 8601 UTC timestamps
+#       – ANSI color output to stderr
+#       – Namespaced API: logging::log_*, logging::init, etc.
+#   • Safe trap management:
+#       – logging::_add_trap    Core helper for chaining traps
+#       – logging::add_err_trap / add_exit_trap / setup_traps
 #
-# Features:
-#   - Structured log levels: INFO, WARN, ERROR
-#   - Color-coded output to stderr
-#   - Namespaced function names via `logging::` convention
-#       - Uses some conventions from the Google Shell Style Guide:
-#       - https://google.github.io/styleguide/shellguide.html
-#       - Particularly the use of `namespace::function` for namespacing.
-#   - Drop-in error trap handler and safe trap appender
+# Requirements:
+#   – Bash 3.1+ (enhanced 4.0+ features available when present)
+#   - Perl
 #
 # Usage:
-#   source ./logging.shlib
-#   logging::log_info "Things are fine"
-#   logging::add_err_trap
+#   source logging.shlib
+#   logging::init "$0"             # set LOGGING_SCRIPT_NAME & wire up ERR/EXIT traps
+#   Path_resolve    "/some/link"  # get real path
+#   set_global FOO "bar"           # define $FOO globally
+#   logging::log_info  "All good"
+#   logging::log_warn  "Heads up"
+#   logging::log_error "An error occurred"
+#   logging::log_fatal "Fatal—exiting"
 #
-# This file is intended to be sourced, not executed.
+# Note:
+#   This file is intended to be sourced, not executed directly.
 # ==============================================================================
-set -Eeuo pipefail
+# Start with POSIX available set options, as we don't know our current shell
+set -eu
+
+die() {
+  # Pre-logging fallback for fatal errors.
+  local msg="$*"
+  printf "FATAL: %s\n" "${msg}" >&2
+  exit 1
+}
+
+# Wrapper around die to allow variables to be used
+# Usage: die_with_var "format string" var1 var2 ...
+# Example: die_with_var "Error: %s failed at %s" "$file" "$line"
+die_with_var() {
+  local fmt="${1}"
+  shift
+  # shellcheck disable=SC2059
+  die "$(printf "${fmt}" "$@")"
+}
 
 # Bail if we're not being sourced
-(return 0 2> /dev/null) || {
-  printf "This script is meant to be sourced, not executed.\n" >&2
-  exit 1
+(return 0 2> /dev/null) || die "This script is meant to be sourced, not executed."
+
+# Use Foo_bar syntax for these functions instead of foo::bar because
+# POSIX is a meanie.
+
+# Helper: resolve symlinks to their real canonical path
+# Tries in order:
+#   1) realpath
+#   2) readlink -f
+#   3) fallback (errors if still a symlink)
+#
+# Usage:
+#   resolved="$(Path_resolve some/path)"
+Path_resolve() {
+  # grab argument
+  path="${1}"
+
+  # 1) try realpath
+  if command -v realpath >/dev/null 2>&1; then
+    realpath -- "$path" 2>/dev/null || printf '%s\n' "${path}"
+    return
+  fi
+
+  # 2) try readlink -f
+  if command -v readlink >/dev/null 2>&1; then
+    readlink -f -- "${path}" 2>/dev/null && return
+    # if readlink -f failed (or isn’t supported), fall through
+  fi
+
+  # 3) fallback: if it’s still not a file or directory, error out
+  if [ ! -f "${path}" ] && [ ! -d "${path}" ]; then
+    die_with_var 'Cannot resolve file path "%s" and no suitable tool is available.' "${path}"
+  fi
+
+  # otherwise just echo what we got
+  printf '%s\n' "${path}"
+}
+
+# Prints just the filename portion of PATH, like `basename` does,
+# but without invoking any external command.
+Path_basename() {
+  local _p="${1}"
+
+  # Strip any trailing slashes (so "/" → "", and "foo/bar/" → "foo/bar")
+  _p="${_p%/}"
+
+  # Remove everything up to the last slash
+  #    (so "foo/bar" → "bar"; if there was no slash, leaves it unchanged)
+  printf '%s\n' "${_p##*/}"
 }
 
 # helper: what’s our current shell?
 _detect_shell() {
   # try /proc → otherwise ps
   if [ -r "/proc/$$/exe" ]; then
-    basename "$(readlink /proc/$$/exe)"
+    Path_basename "$(Path_resolve /proc/$$/exe)"
   else
-    basename "$(ps -p $$ -o comm= 2> /dev/null)"
+    Path_basename "$(ps -p $$ -o comm= 2> /dev/null)"
   fi
 }
 
 # if not bash, complain and bail
 if [ -z "${BASH_VERSION-}" ]; then
   shell="$(_detect_shell 2> /dev/null || echo unknown)"
-  printf 'Error: this script requires Bash. You appear to be running in %s.\n' \
-    "${shell}" >&2
-  return 1
+  die_with_var 'This script requires Bash. You appear to be running in "%s"' "${shell}"
 fi
+
+# We know we're running in Bash now so we can safely set Bash specific options
+set -Eo pipefail
+
+# Returns 0 (success) if 'declare -g' is supported
+_has_declare_g() {
+  declare -g __feature_test=ok > /dev/null 2>&1
+}
+
+# Returns 0 if 'printf -v var format…' is supported
+_has_printf_v() {
+  printf -v __feature_test '' > /dev/null 2>&1
+}
+
+set_global() {
+  local var="${1}"
+  shift
+  local val="$*"
+
+  if _has_declare_g; then
+    # Bash 4.2+
+    declare -g "${var}=${val}"
+  elif _has_printf_v; then
+    # Bash 3.1+
+    printf -v "${var}" "%s" "${val}"
+  else
+    # Super old bash, eval must be used but let's make it at least somewhat safe with perl.
+    local safe_name safe_val
+
+    safe_name="$(
+      perl -e '
+        $n = shift;
+        die "Bad varname\n" unless $n =~ /^[A-Za-z_]\w*$/;
+        print $n
+      ' -- "${var}"
+    )" || die_with_var 'Invalid variable name "%s"' "${var}"
+
+    safe_val="$(perl -pe "s/'/'\\\\''/g" <<<"${val}")"
+    eval "$safe_name='$safe_val'"
+  fi
+
+  # on exit, unset the global variable
+  logging::_add_trap EXIT "unset ${var}"
+}
+
+capitalize_variable() {
+  local var="${1}"
+
+  if (( BASH_VERSINFO[0] >= 4 )); then
+    # Bash 4.0+ has the ${var^^} syntax so we use that
+    printf "%s" "${var^^}"
+  else
+    # Fallback to using tr
+    printf "%s" "${var}" | tr '[:lower:]' '[:upper:]'
+  fi
+}
 
 # logging::log LEVEL MESSAGE
 # Logs a message to stderr with UTC timestamp and color-coded level.
-# Usage: logging::log INFO "Message"
+#   Usage: logging::log INFO "Message"
 # Note: For internal use by other logging functions.
 logging::log() {
-  local level="${1^^}" # Capitalize input for case-insensitive matching
+  local level
+  level="$(capitalize_variable "${1}")" # Capitalize input for case-insensitive matching
   shift
   local ts script="${LOGGING_SCRIPT_NAME:-}"
   ts="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
@@ -66,8 +199,7 @@ logging::log() {
     WARN) color=$'\033[0;33m' ;;  # Yellow!
     ERROR) color=$'\033[0;31m' ;; # Red!
     *)
-      printf "Invalid log level: %s\n" "${level}"
-      exit 1
+      die_with_var 'Invalid log level: "%s"' "${level}"
       ;;
   esac
 
@@ -115,11 +247,17 @@ logging::init() {
 
   local source_path="${1:-${BASH_SOURCE[1]}}"
   if [[ -n ${source_path} ]]; then
-    declare -gx LOGGING_SCRIPT_NAME="$(basename "$(realpath "${source_path}")" 2> /dev/null || echo "(unknown)")"
+    local script_name
+    script_name="$(Path_basename "$(Path_resolve "${source_path}")" 2> /dev/null || echo "(unknown)")"
+    set_global LOGGING_SCRIPT_NAME script_name
+    export LOGGING_SCRIPT_NAME
   fi
 
   # Setup traps
   logging::setup_traps
+
+  # We got big boy logging now we don't need the die* family
+  unset -f die die_with_var
 }
 
 # logging::trap_err_handler
@@ -130,53 +268,53 @@ logging::trap_err_handler() {
   logging::log_fatal "Unexpected fatal error in ${BASH_SOURCE[1]} on line ${BASH_LINENO[0]}: ${BASH_COMMAND}"
 }
 
-# logging::add_err_trap
-# Appends logging::trap_err_handler to an existing ERR trap without overwriting it.
+# logging::_add_trap TRAP_TYPE HANDLER_COMMAND
+# Helper function to append a handler to an existing trap without overwriting it.
 # Uses Perl to safely parse and chain existing trap commands.
-logging::add_err_trap() {
+#
+# Usage:
+#   logging::_add_trap ERR 'logging::trap_err_handler'
+#   logging::_add_trap EXIT 'logging::cleanup'
+logging::_add_trap() {
+  local trap_type="${1}"
+  local handler_command="${2}"
   local existing
 
-  # Extract any existing ERR trap command.
+  # Extract any existing trap command for the specified trap type.
   # This matches lines like: trap -- 'echo something' ERR
   # We use Perl because quoting rules in shell are cursed and sed can't be trusted.
   # This extracts the inner single-quoted command safely—even if it contains
   # spaces, quotes, or other fragile syntax.
-  existing="$(perl -lne '
-        # Match a line that starts with `trap -- '...command...' ERR`
-        if (/^trap -- '\''([^'\'']*)'\'' ERR$/) {
-            print "$1"; # Print just the command portion inside the single quotes
+  existing="$(perl -lne "
+        # Match a line that starts with \`trap -- '...command...' ${trap_type}\`
+        if (/^trap -- '([^']*)' ${trap_type}\$/) {
+            print \"\$1\"; # Print just the command portion inside the single quotes
         }
-    ' <<< "$(trap -p ERR)" || true)"
+    " <<< "$(trap -p "${trap_type}")" || true)"
 
   if [[ -z ${existing:-} ]]; then
-    trap -- 'logging::trap_err_handler' ERR
+    trap -- "${handler_command}" "${trap_type}"
   else
-    trap -- "$(printf '%s; logging::trap_err_handler' "$existing")" ERR
+    trap -- "$(printf '%s; %s' "${existing}" "${handler_command}")" "${trap_type}"
   fi
+}
+
+# logging::add_err_trap
+# Appends logging::trap_err_handler to an existing ERR trap without overwriting it.
+logging::add_err_trap() {
+  logging::_add_trap ERR 'logging::trap_err_handler'
 }
 
 # logging::cleanup
 # Unsets any global logging state (e.g., script name)
 logging::cleanup() {
-  unset LOGGING_SCRIPT_NAME
+  unset -v LOGGING_SCRIPT_NAME __feature_test
 }
 
 # logging::add_exit_trap
 # Appends logging::cleanup to the EXIT trap without overwriting it.
 logging::add_exit_trap() {
-  local existing
-
-  existing="$(perl -lne '
-    if (/^trap -- '\''([^'\'']*)'\'' EXIT$/) {
-      print "$1"
-    }
-  ' <<< "$(trap -p EXIT)" || true)"
-
-  if [[ -z ${existing:-} ]]; then
-    trap -- 'logging::cleanup' EXIT
-  else
-    trap -- "$(printf '%s; logging::cleanup' "$existing")" EXIT
-  fi
+  logging::_add_trap EXIT 'logging::cleanup'
 }
 
 # logging::setup_traps
