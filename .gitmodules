@@ -1,3 +1,6 @@
 [submodule "unix/systemd"]
 	path = unix/systemd
 	url = git@github.com:peppapig450/ssh-agent-setup
+[submodule "shell/lib/logging"]
+	path = shell/lib/logging
+	url = git@github.com:peppapig450/bashing-logs
