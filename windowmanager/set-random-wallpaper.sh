@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-
 # --- Purpose ---
 #
 # This script selects a random wallpaper from a user-defined directory, applies a color theme transformation
@@ -11,7 +10,7 @@ set -Eeuo pipefail
 
 # --- Configuration --
 
-readonly wp_dir="${HOME}/media/Wallpapers"                                                   # Source directory for wallpapers
+readonly wp_dir="${HOME}/.local/share/wallpapers/unthemed"                                   # Source directory for wallpapers
 readonly theme_dir="${HOME}/.cache/themed_wallpapers"                                        # Directory for storing themed wallpapers
 readonly symlink_path="${HOME}/.config/.wallpaper"                                           # Symlink to the current wallpapers
 readonly transition_opts=(--transition-step 40 --transition-fps 60 --transition-type center) # swww transition settings
@@ -40,7 +39,7 @@ check_dependencies() {
   local missing=()
 
   for cmd in lutgen swww; do
-    if ! command -v "${cmd}" > /dev/null 2>&1; then
+    if ! command -v "${cmd}" >/dev/null 2>&1; then
       missing+=("${cmd}")
     fi
   done
@@ -61,7 +60,7 @@ init_directories() {
 # Get available dark-themed palettes from lutgen
 #
 get_available_themes() {
-  lutgen palette names | grep -vE '(-light|-dawn|papercolor-light|solarized-light|zenwritten-light|catppuccin-latte)'
+  lutgen palette names 2>/dev/null | grep -vE '(-light|-dawn|papercolor-light|solarized-light|zenwritten-light|catppuccin-latte)'
 }
 
 #
@@ -70,15 +69,9 @@ get_available_themes() {
 pick_random_wallpaper() {
   local -a wallpapers
 
-  # Use compgen -G + extglob for fast case-insensitive globbing
-  shopt -s -- extglob
-  mapfile -t wallpapers < <(compgen -G -- \
-    "${wp_dir}/**/*.+(j|J)p?(e|E)g" \
-    "${wp_dir}/**/*/*.{png,gif,webp,heic,heif,avif}")
+  wallpapers=("${wp_dir}/"*)
 
   ((${#wallpapers[@]} > 0)) || die "No wallpapers found in ${wp_dir}"
-
-  shopt -u -- extglob
   printf '%s\n' "${wallpapers[RANDOM % ${#wallpapers[@]}]}"
 }
 
@@ -86,8 +79,8 @@ pick_random_wallpaper() {
 # Validate if the requested theme exists, else pick a random one
 #
 validate_theme() {
-  local requested="${1}"
-  local available=("${2}")
+  local requested="$1"
+  local -n available="$2"
 
   for theme in "${available[@]}"; do
     if [[ ${theme} == "${requested}" ]]; then
@@ -95,10 +88,6 @@ validate_theme() {
       return
     fi
   done
-
-  local random_theme
-  random_theme="$(shuf -n1 -e "${available[@]}")"
-  printf '%s\n' "${random_theme}"
 }
 
 #
@@ -134,13 +123,11 @@ main() {
   check_dependencies
   init_directories
 
-  local output
-  output="$(get_available_themes)"
-  mapfile -t available_themes <<< "${output}"
+  local -a available_themes
+  mapfile -t available_themes < <(get_available_themes)
 
   local requested_theme="${1:-${THEME:-}}"
-  local theme
-  theme="$(validate_theme "${requested_theme}" "${available_themes[*]}")"
+  theme="$(validate_theme "${requested_theme}" available_themes)"
   log "Using theme: ${theme}"
 
   local wallpaper
