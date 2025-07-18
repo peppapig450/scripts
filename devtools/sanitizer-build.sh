@@ -17,23 +17,23 @@ LDFLAGS=""
 
 case "$BUILD_TYPE" in
     asan)
-        SANITIZER_FLAGS="-fsanitize=address -fno-omit-frame-pointer -O1 -g"
+        SANITIZER_FLAGS="-fsanitize=address -O1"
         LDFLAGS="-fsanitize=address"
         ;;
     msan)
-        SANITIZER_FLAGS="-fsanitize=memory -fno-omit-frame-pointer -O1 -g"
+        SANITIZER_FLAGS="-fsanitize=memory -O1"
         LDFLAGS="-fsanitize=memory"
         ;;
     tsan)
-        SANITIZER_FLAGS="-fsanitize=thread -O1 -g"
+        SANITIZER_FLAGS="-fsanitize=thread -O1"
         LDFLAGS="-fsanitize=thread"
         ;;
     ubsan)
-        SANITIZER_FLAGS="-fsanitize=undefined -O1 -g"
+        SANITIZER_FLAGS="-fsanitize=undefined,float-divide-by-zero -O1"
         LDFLAGS="-fsanitize=undefined"
         ;;
     valgrind)
-        SANITIZER_FLAGS="-O0 -g -fno-omit-frame-pointer"
+        SANITIZER_FLAGS="-O0"
         ;;
     *)
         echo "Usage: $0 {asan|msan|tsan|ubsan|valgrind}"
@@ -49,6 +49,6 @@ echo ">>> Building with $BUILD_TYPE sanitizer..."
 cores="$(( $(getconf _NPROCESSORS_ONLN) / 2 ))"
 # NOTE: LD_FLAGS is NOT standard this is a fastp quirk.
 make -j${cores} CXX="clang++" \
-     CXXFLAGS="$SANITIZER_FLAGS -std=c++11 -pthread -I./inc" \
+     CXXFLAGS="$SANITIZER_FLAGS -std=c++11 -pthread -fno-omit-frame-pointer -D_GLIBCXX_DEBUG -g -I./inc" \
      LD_FLAGS="$LDFLAGS -lisal -ldeflate -lpthread" \
      ${TARGET}
