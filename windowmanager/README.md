@@ -15,15 +15,13 @@ If it makes your desktop prettier, smarter, or slightly less embarassing, it goe
 
 ## Structure
 
-Scripts are organized into subfolders by purpose or tool, for example:
+Scripts are organized into subfolders by purpose or tool:
 
-- `wallpaper/` - Scripts for wallpaper randomization, theming (e.g., with [lutgen](https://github.com/ozwaldorf/lutgen-rs)), and transition effects.
-- `waybar/` - Custom modules, event hooks, and tweaks for the Waybar status bar.
 - `hyprland/` – Startup automation, keybind helpers, dynamic workspace managers.
   - `hypr_window_switcher.py`: Interactive window picker using `fuzzel` and Hyprland IPC.
   - `hyprland_utils/`: Internal helper module for talking to Hyprland over IPC.
-
-- `fuzzel/` – Launchers, menu utilities, or other random popups nobody asked for.
+- `theming/` – Utilities for building and applying themes.
+- `set-random-wallpaper.sh` – Simple wallpaper randomizer script.
 
 ---
 

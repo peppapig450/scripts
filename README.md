@@ -3,6 +3,10 @@ Collection of all my scripts for Windows, MacOS, and all my Linux systems.
 
 ## Structure
 
+- **automation/**: Home automation utilities (e.g., `home/fan_controller.py`)
+- **c/**: C programs and helpers
+- **devtools/**: Developer tooling and profiling scripts
+- **misc/**: Miscellaneous one-off scripts
 - **python/**: Python scripts
   - **analysis/**: Code and data analysis tools
   - **file_utils/**: File manipulation utilities
@@ -20,8 +24,9 @@ Collection of all my scripts for Windows, MacOS, and all my Linux systems.
   - **system/**: System management scripts
 - **powershell/**: PowerShell scripts
   - **general/**: General-purpose utilities
-  - **vm/**: Virtual machine tools
   - **modules/**: PowerShell modules (e.g., RealPath)
+- **unix/**: Functions, aliases, and systemd helpers for UNIX-like systems
+- **windowmanager/**: Scripts for Hyprland and desktop theming
 
 ## Naming Conventions:
 This is an overview of my wacky/unorthodox naming conventions.
