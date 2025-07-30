@@ -8,7 +8,7 @@
 
     <key>ProgramArguments</key>
     <array>
-        <string>/Users/nick/.local/bin/cleanup-tmp-mounts</string>
+        <string>/opt/homebrew/bin/bash Users/nick/.local/bin/cleanup-tmp-mounts</string>
     </array>
 
     <key>StartCalendarInterval</key>
