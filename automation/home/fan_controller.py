@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import Any
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 
 class FanSpeed(IntEnum):
@@ -36,6 +38,8 @@ class FanConfig:
 
     ip_address: str = "192.168.1.26"
     timeout: int = 3
+    retries: int = 5
+    backoff_factor: float = 0.5
 
     @property
     def url(self) -> str:
@@ -54,12 +58,21 @@ class FanController:
     def __init__(self, config: FanConfig) -> None:
         self.config = config
         self.logger = logging.getLogger(__name__)
+        self.session = requests.Session()
+        retry = Retry(
+            total=self.config.retries,
+            backoff_factor=self.config.backoff_factor,
+            status_forcelist=(500, 502, 503, 504),
+        )
+        adapter = HTTPAdapter(max_retries=retry)
+        self.session.mount("http://", adapter)
+        self.session.mount("https://", adapter)
 
     def _send_command(self, payload: dict[str, Any]) -> requests.Response:
         """Send command to the fan and return response."""
         try:
             self.logger.debug("Sending command: %s", payload)
-            response = requests.post(
+            response = self.session.post(
                 self.config.url,
                 headers=self.config.headers,
                 data=json.dumps(payload),
@@ -161,6 +174,18 @@ Fan speed levels:
         help="Request timeout in seconds (default: %(default)s)",
     )
     parser.add_argument(
+        "--retries",
+        type=int,
+        default=5,
+        help="Total retry attempts for requests (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--backoff",
+        type=float,
+        default=0.5,
+        help="Retry backoff factor (default: %(default)s)",
+    )
+    parser.add_argument(
         "--verbose", "-v", action="store_true", help="Enable verbose logging"
     )
 
@@ -178,7 +203,12 @@ def main() -> None:
 
     try:
         # Create configuration and controller
-        config = FanConfig(ip_address=args.ip, timeout=args.timeout)
+        config = FanConfig(
+            ip_address=args.ip,
+            timeout=args.timeout,
+            retries=args.retries,
+            backoff_factor=args.backoff,
+        )
         controller = FanController(config)
 
         # Use pattern matching for cleaner action handling (Python 3.10+)
